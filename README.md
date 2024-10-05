@@ -11,9 +11,9 @@ Usage:
   htping ping <url> [flags]
 
 Flags:
-  -c, --count int   Number of pings to perform (default 5)
-  -h, --help        help for ping
-      --http        Use HTTP instead of HTTPS
+-c, --count int   Number of pings to perform (default 5)
+-h, --help        help for ping
+    --http        Use HTTP instead of HTTPS
 
 `htping info`
 
