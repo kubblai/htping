@@ -35,7 +35,7 @@ Use "htping info [command] --help" for more information about a command.
 
 ## Build
 
-`git clone https://github.com/kubblai/htping`  
+`git clone https://github.com/kubblai/htping.git`  
 `go build main.go`  
 
 ### Features:
