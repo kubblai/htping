@@ -1,5 +1,5 @@
 # htping:
-cli app to http/s ping web endpoints and get stats
+cli app to http/s ping web endpoints and get stats or some info.
 
 ## Usage
 
