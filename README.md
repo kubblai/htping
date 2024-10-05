@@ -3,35 +3,35 @@ cli app to http/s ping web endpoints and get stats or some info.
 
 ## Usage
 
-`htping ping`__
+`htping ping`
 
-Perform HTTP(S) ping to the URL
+`Perform HTTP(S) ping to the URL
 
-Usage:__
-  htping ping <url> [flags]__
+Usage:
+  htping ping <url> [flags]
 
-Flags:__
--c, --count int   Number of pings to perform (default 5)__
--h, --help        help for ping__
-    --http        Use HTTP instead of HTTPS__
+Flags:
+-c, --count int   Number of pings to perform (default 5)
+-h, --help        help for ping
+    --http        Use HTTP instead of HTTPS`
 
-`htping info`__
+`htping info`
 
-Get information about a URL options are 'whois', 'dns', 'cert info'__
+`Get information about a URL options are 'whois', 'dns', 'cert info'
 
-Usage:__
-  htping info [command]__
+Usage:
+  htping info [command]
 
-Available Commands:__
-  cert        Show certificate details for HTTPS website__
-  dns         Show authoritative nameservers for the URL__
-  ip          Show IP addresses for the URL__
-  whois       Show WHOIS information for the URL__
+Available Commands:
+  cert        Show certificate details for HTTPS website
+  dns         Show authoritative nameservers for the URL
+  ip          Show IP addresses for the URL
+  whois       Show WHOIS information for the URL
 
-Flags:__
-  -h, --help   help for info__
+Flags:
+  -h, --help   help for info
 
-Use "htping info [command] --help" for more information about a command.__
+Use "htping info [command] --help" for more information about a command.`
 
 ### Features:
 * Authoritative dns server - done
