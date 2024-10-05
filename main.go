@@ -136,21 +136,27 @@ func main() {
 				successfulPings++
 
 				statusCode := resp.StatusCode
+				var statusOk string = "OK"
 				var statusColor *color.Color
 				switch {
 				case statusCode >= 200 && statusCode < 300:
 					statusColor = color.New(color.FgGreen)
+					statusOk = "Status OK"
 				case statusCode >= 300 && statusCode < 400:
 					statusColor = color.New(color.FgYellow)
+					statusOk = "Some redirect"
 				case statusCode >= 400 && statusCode < 500:
 					statusColor = color.New(color.FgRed)
+					statusOk = "Auth Error"
 				case statusCode >= 500:
 					statusColor = color.New(color.FgBlue)
+					statusOk = "Server Error"
 				default:
 					statusColor = color.New(color.FgWhite)
+					statusOk = "Unknown"
 				}
 
-				statusColor.Printf("Status: %d Time: %v\n", duration, totalDuration)
+				statusColor.Printf("Status code: %v, %v, Time: %v\n", statusCode, statusOk, totalDuration)
 				resp.Body.Close()
 
 				time.Sleep(1 * time.Second) // Wait 1 second between pings
