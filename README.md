@@ -14,24 +14,29 @@ Flags:
 -c, --count int   Number of pings to perform (default 5)  
 -h, --help        help for ping  
     --http        Use HTTP instead of HTTPS  
-
+  
 `htping info`
-
+  
 Get information about a URL options are 'whois', 'dns', 'cert info'  
-
+  
 Usage:  
   htping info [command]  
-
+  
 Available Commands:  
   cert        Show certificate details for HTTPS website  
   dns         Show authoritative nameservers for the URL  
   ip          Show IP addresses for the URL  
   whois       Show WHOIS information for the URL  
-
+  
 Flags:  
   -h, --help   help for info  
 
 Use "htping info [command] --help" for more information about a command.  
+
+## Build
+
+`git clone https://github.com/kubblai/htping`  
+`go build main.go`  
 
 ### Features:
 * Authoritative dns server - done
