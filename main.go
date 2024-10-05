@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -89,6 +90,47 @@ func main() {
 			fmt.Println(result)
 		},
 	}
+	var showHTMLFlag bool
+	var outputFilename string
+	var showHTMLCmd = &cobra.Command{
+		Use:   "htping ping <url> --html",
+		Short: "Show the HTML of the webpage",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			url := args[0]
+			if !hasProtocol(url) {
+				url = "https://" + url
+			}
+
+			client := &http.Client{
+				Timeout: 10 * time.Second,
+			}
+
+			resp, err := client.Get(url)
+			if err != nil {
+				fmt.Printf("Error fetching HTML: %v\n", err)
+				return
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				fmt.Printf("Error reading HTML: %v\n", err)
+				return
+			}
+
+			if outputFilename != "" {
+				err := os.WriteFile(outputFilename, body, 0644)
+				if err != nil {
+					fmt.Printf("Error writing to file: %v\n", err)
+					return
+				}
+				fmt.Printf("HTML content saved to %s\n", outputFilename)
+			} else {
+				fmt.Printf("\nHTML Content:\n%s\n", string(body))
+			}
+		},
+	}
 
 	var pingCount int
 	var useHTTP bool
@@ -168,15 +210,23 @@ func main() {
 			} else {
 				fmt.Println("\nNo successful pings")
 			}
+
+			if showHTMLFlag {
+				showHTMLCmd.Run(cmd, args)
+			}
 		},
 	}
 
 	// Initialize flags
 	pingCmd.Flags().IntVarP(&pingCount, "count", "c", 5, "Number of pings to perform")
 	pingCmd.Flags().BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
+	pingCmd.Flags().BoolVar(&showHTMLFlag, "html", false, "Show HTML content after pings")
+	pingCmd.Flags().StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html")
 
+	// Add the output flag to showHTMLCmd as well
+	showHTMLCmd.Flags().StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html or htping html <url>")
 	infoCmd.AddCommand(dnsCmd, ipCmd, certCmd, whoisCmd)
-	rootCmd.AddCommand(infoCmd, pingCmd)
+	rootCmd.AddCommand(infoCmd, pingCmd, showHTMLCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
