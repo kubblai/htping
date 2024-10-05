@@ -93,8 +93,8 @@ func main() {
 	var showHTMLFlag bool
 	var outputFilename string
 	var showHTMLCmd = &cobra.Command{
-		Use:   "htping ping <url> --html",
-		Short: "Show the HTML of the webpage",
+		Use:   "--html",
+		Short: "Used with ping to show the HTML of the webpage",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			url := args[0]
