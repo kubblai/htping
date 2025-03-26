@@ -7,7 +7,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/fatih/color"
@@ -166,47 +168,74 @@ func main() {
 			var totalDuration time.Duration
 			var successfulPings int
 
-			for i := 0; i < pingCount; i++ {
-				start := time.Now()
-				resp, err := client.Get(url)
-				if err != nil {
-					fmt.Printf("Error: %v\n", err)
-					continue
-				}
-				duration := time.Since(start)
-				totalDuration += duration
-				successfulPings++
+			// Set up signal handling for Ctrl+C
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-				statusCode := resp.StatusCode
-				var statusOk string = "OK"
-				var statusColor *color.Color
-				switch {
-				case statusCode >= 200 && statusCode < 300:
-					statusColor = color.New(color.FgGreen)
-					statusOk = "Status OK"
-				case statusCode >= 300 && statusCode < 400:
-					statusColor = color.New(color.FgYellow)
-					statusOk = "Some redirect"
-				case statusCode >= 400 && statusCode < 500:
-					statusColor = color.New(color.FgRed)
-					statusOk = "Auth Error"
-				case statusCode >= 500:
-					statusColor = color.New(color.FgBlue)
-					statusOk = "Server Error"
+			// Create a done channel to signal when to stop pinging
+			done := make(chan bool, 1)
+
+			// Start a goroutine to handle the interrupt signal
+			go func() {
+				<-sigChan
+				fmt.Println("\nReceived interrupt signal. Stopping pings...")
+				done <- true
+			}()
+
+			i := 0
+			runForever := pingCount <= 0
+
+		pingLoop:
+			for runForever || i < pingCount {
+				select {
+				case <-done:
+					break pingLoop
 				default:
-					statusColor = color.New(color.FgWhite)
-					statusOk = "Unknown"
+					start := time.Now()
+					resp, err := client.Get(url)
+					if err != nil {
+						fmt.Printf("Error: %v\n", err)
+						i++
+						time.Sleep(1 * time.Second)
+						continue
+					}
+					duration := time.Since(start)
+					totalDuration += duration
+					successfulPings++
+
+					statusCode := resp.StatusCode
+					var statusOk string = "OK"
+					var statusColor *color.Color
+					switch {
+					case statusCode >= 200 && statusCode < 300:
+						statusColor = color.New(color.FgGreen)
+						statusOk = "Status OK"
+					case statusCode >= 300 && statusCode < 400:
+						statusColor = color.New(color.FgYellow)
+						statusOk = "Some redirect"
+					case statusCode >= 400 && statusCode < 500:
+						statusColor = color.New(color.FgRed)
+						statusOk = "Auth Error"
+					case statusCode >= 500:
+						statusColor = color.New(color.FgBlue)
+						statusOk = "Server Error"
+					default:
+						statusColor = color.New(color.FgWhite)
+						statusOk = "Unknown"
+					}
+
+					statusColor.Printf("Status code: %v, %v, Time: %v\n", statusCode, statusOk, duration)
+					resp.Body.Close()
+
+					i++
+					time.Sleep(1 * time.Second) // Wait 1 second between pings
 				}
-
-				statusColor.Printf("Status code: %v, %v, Time: %v\n", statusCode, statusOk, duration)
-				resp.Body.Close()
-
-				time.Sleep(1 * time.Second) // Wait 1 second between pings
 			}
 
 			if successfulPings > 0 {
 				avgDuration := totalDuration / time.Duration(successfulPings)
 				fmt.Printf("\nAverage response time: %v from %v\n", avgDuration, url)
+				fmt.Printf("Total successful pings: %d\n", successfulPings)
 			} else {
 				fmt.Println("\nNo successful pings")
 			}
@@ -218,7 +247,7 @@ func main() {
 	}
 
 	// Initialize flags
-	pingCmd.Flags().IntVarP(&pingCount, "count", "c", 5, "Number of pings to perform")
+	pingCmd.Flags().IntVarP(&pingCount, "count", "c", 0, "Number of pings to perform (0 for continuous)")
 	pingCmd.Flags().BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
 	pingCmd.Flags().BoolVar(&showHTMLFlag, "html", false, "Show HTML content after pings")
 	pingCmd.Flags().StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html")
