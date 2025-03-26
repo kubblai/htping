@@ -16,14 +16,14 @@ import (
 )
 
 func main() {
-	var rootCmd = &cobra.Command{Use: "htping"}
+	rootCmd := &cobra.Command{Use: "htping"}
 
-	var infoCmd = &cobra.Command{
+	infoCmd := &cobra.Command{
 		Use:   "info",
 		Short: "Get information about a URL options are 'whois', 'dns', 'cert info'",
 	}
 
-	var dnsCmd = &cobra.Command{
+	dnsCmd := &cobra.Command{
 		Use:   "dns <url>",
 		Short: "Show authoritative nameservers for the URL",
 		Args:  cobra.ExactArgs(1),
@@ -39,7 +39,7 @@ func main() {
 		},
 	}
 
-	var ipCmd = &cobra.Command{
+	ipCmd := &cobra.Command{
 		Use:   "ip <url>",
 		Short: "Show IP addresses for the URL",
 		Args:  cobra.ExactArgs(1),
@@ -55,7 +55,7 @@ func main() {
 		},
 	}
 
-	var certCmd = &cobra.Command{
+	certCmd := &cobra.Command{
 		Use:   "cert <url>",
 		Short: "Show certificate details for HTTPS website",
 		Args:  cobra.ExactArgs(1),
@@ -74,7 +74,7 @@ func main() {
 		},
 	}
 
-	var whoisCmd = &cobra.Command{
+	whoisCmd := &cobra.Command{
 		Use:   "whois <url>",
 		Short: "Show WHOIS information for the URL",
 		Args:  cobra.ExactArgs(1),
@@ -92,7 +92,7 @@ func main() {
 	}
 	var showHTMLFlag bool
 	var outputFilename string
-	var showHTMLCmd = &cobra.Command{
+	showHTMLCmd := &cobra.Command{
 		Use:   "--html",
 		Short: "Used with ping to show the HTML of the webpage",
 		Args:  cobra.ExactArgs(1),
@@ -134,7 +134,7 @@ func main() {
 
 	var pingCount int
 	var useHTTP bool
-	var pingCmd = &cobra.Command{
+	pingCmd := &cobra.Command{
 		Use:   "ping <url>",
 		Short: "Perform HTTP(S) ping to the URL",
 		Args:  cobra.ExactArgs(1),
@@ -198,7 +198,7 @@ func main() {
 					statusOk = "Unknown"
 				}
 
-				statusColor.Printf("Status code: %v, %v, Time: %v\n", statusCode, statusOk, totalDuration)
+				statusColor.Printf("Status code: %v, %v, Time: %v\n", statusCode, statusOk, duration)
 				resp.Body.Close()
 
 				time.Sleep(1 * time.Second) // Wait 1 second between pings
