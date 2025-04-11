@@ -204,7 +204,7 @@ func main() {
 					successfulPings++
 
 					statusCode := resp.StatusCode
-					var statusOk string = "OK"
+					statusOk := "OK"
 					var statusColor *color.Color
 					switch {
 					case statusCode >= 200 && statusCode < 300:
