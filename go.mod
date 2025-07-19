@@ -1,6 +1,6 @@
 module kubblai/htping
 
-go 1.24.4
+go 1.24.5
 
 require (
 	github.com/fatih/color v1.17.0
