@@ -84,7 +84,7 @@ type PingResultMsg struct {
 	Response PingResponse
 }
 
-func (m PingModel) Init() tea.Cmd {
+func (m *PingModel) Init() tea.Cmd {
 	return tea.Batch(
 		tea.Tick(time.Second, func(t time.Time) tea.Msg {
 			return PingTickMsg{}
@@ -93,27 +93,19 @@ func (m PingModel) Init() tea.Cmd {
 	)
 }
 
-func (m PingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *PingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
-			m.running = false
 			return m, tea.Quit
 		case "i":
 			// Switch to info menu
-			m.running = false
-			infoModel := NewInfoModel(extractHostFromURL(m.url))
-			infoModel.width = m.width
-			infoModel.height = m.height
-			infoModel.fromWelcome = false
+			infoModel := NewInfoModelWithSize(extractHostFromURL(m.url), m.width, m.height)
 			return infoModel, nil
 		case "w":
 			// Go back to welcome menu
-			m.running = false
-			welcomeModel := NewWelcomeModel()
-			welcomeModel.width = m.width
-			welcomeModel.height = m.height
+			welcomeModel := NewWelcomeModelWithSize(m.width, m.height)
 			return welcomeModel, nil
 		case "p", " ":
 			// Pause/resume pinging
@@ -151,7 +143,7 @@ func (m PingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m PingModel) View() string {
+func (m *PingModel) View() string {
 	if m.width == 0 || m.height == 0 {
 		// Use default sizing if window size not set
 		return m.renderContent(80, 24)
@@ -159,7 +151,7 @@ func (m PingModel) View() string {
 	return m.renderContent(m.width, m.height)
 }
 
-func (m PingModel) renderContent(width, height int) string {
+func (m *PingModel) renderContent(width, height int) string {
 	if len(m.responses) == 0 {
 		content := headerStyle.Render(fmt.Sprintf("🌐 HTTP Pinging %s [%s]", m.url, m.ip)) + "\n\n" +
 			infoStyle.Render("Starting ping...")
@@ -260,7 +252,7 @@ func (m PingModel) renderContent(width, height int) string {
 	return m.fitToTerminal(content, width, height)
 }
 
-func (m PingModel) fitToTerminal(content string, width, height int) string {
+func (m *PingModel) fitToTerminal(content string, width, height int) string {
 	// Create a responsive box style
 	responsiveBoxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -272,7 +264,7 @@ func (m PingModel) fitToTerminal(content string, width, height int) string {
 	return responsiveBoxStyle.Render(content)
 }
 
-func (m PingModel) performPing() tea.Cmd {
+func (m *PingModel) performPing() tea.Cmd {
 	return func() tea.Msg {
 		start := time.Now()
 		resp, err := m.client.Get(m.url)
@@ -332,7 +324,7 @@ func main() {
 		ip := ips[0].String()
 
 		// Create TUI model
-		model := PingModel{
+		model := &PingModel{
 			url:        url,
 			running:    true,
 			count:      pingCount,
@@ -546,8 +538,8 @@ type InfoModel struct {
 }
 
 // NewInfoModel creates a new info model
-func NewInfoModel(url string) InfoModel {
-	return InfoModel{
+func NewInfoModel(url string) *InfoModel {
+	return &InfoModel{
 		url:            url,
 		options:        []string{"DNS Servers", "IP Addresses", "Certificate Info", "WHOIS Info", "---", "Start HTTP Ping"},
 		selected:       0,
@@ -557,11 +549,20 @@ func NewInfoModel(url string) InfoModel {
 	}
 }
 
-func (m InfoModel) Init() tea.Cmd {
+// NewInfoModelWithSize creates a new InfoModel with specified dimensions
+func NewInfoModelWithSize(url string, width, height int) *InfoModel {
+	m := NewInfoModel(url)
+	m.width = width
+	m.height = height
+	m.fromWelcome = false
+	return m
+}
+
+func (m *InfoModel) Init() tea.Cmd {
 	return tea.WindowSize()
 }
 
-func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -578,9 +579,7 @@ func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "w":
 			// Go back to welcome menu if not showing result
 			if !m.showResult && m.fromWelcome {
-				welcomeModel := NewWelcomeModel()
-				welcomeModel.width = m.width
-				welcomeModel.height = m.height
+				welcomeModel := NewWelcomeModelWithSize(m.width, m.height)
 				return welcomeModel, nil
 			}
 		case "up", "k":
@@ -599,7 +598,7 @@ func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Check if "Start HTTP Ping" is selected
 				if m.options[m.selected] == "Start HTTP Ping" {
 					// Switch to ping mode
-					pingModel := PingModel{
+					pingModel := &PingModel{
 						url:        "https://" + m.url,
 						running:    true,
 						count:      0, // Continuous
@@ -637,7 +636,7 @@ func (m InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m InfoModel) View() string {
+func (m *InfoModel) View() string {
 	if m.quit {
 		return ""
 	}
@@ -727,7 +726,7 @@ func (m InfoModel) View() string {
 	return m.fitInfoToTerminal(content, width, height)
 }
 
-func (m InfoModel) fitInfoToTerminal(content string, width, height int) string {
+func (m *InfoModel) fitInfoToTerminal(content string, width, height int) string {
 	// Create a responsive box style
 	responsiveBoxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -744,7 +743,7 @@ type InfoResultMsg struct {
 	Result string
 }
 
-func (m InfoModel) fetchInfo() tea.Cmd {
+func (m *InfoModel) fetchInfo() tea.Cmd {
 	return func() tea.Msg {
 		var result string
 		switch m.selected {
@@ -923,14 +922,14 @@ type WelcomeOption struct {
 }
 
 // NewWelcomeModel creates a new welcome model
-func NewWelcomeModel() WelcomeModel {
+func NewWelcomeModel() *WelcomeModel {
 	ti := textinput.New()
 	ti.Placeholder = "Enter domain (e.g., google.com, github.com)"
 	ti.Focus()
 	ti.CharLimit = 100
 	ti.Width = 50
 
-	return WelcomeModel{
+	return &WelcomeModel{
 		selected: 0,
 		textInput: ti,
 		options: []WelcomeOption{
@@ -968,11 +967,19 @@ func NewWelcomeModel() WelcomeModel {
 	}
 }
 
-func (m WelcomeModel) Init() tea.Cmd {
+// NewWelcomeModelWithSize creates a new WelcomeModel with specified dimensions
+func NewWelcomeModelWithSize(width, height int) *WelcomeModel {
+	m := NewWelcomeModel()
+	m.width = width
+	m.height = height
+	return m
+}
+
+func (m *WelcomeModel) Init() tea.Cmd {
 	return tea.WindowSize()
 }
 
-func (m WelcomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *WelcomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -1034,7 +1041,7 @@ func (m WelcomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m WelcomeModel) handleSelection() (tea.Model, tea.Cmd) {
+func (m *WelcomeModel) handleSelection() (tea.Model, tea.Cmd) {
 	selectedOption := m.options[m.selected]
 	
 	switch selectedOption.Action {
@@ -1066,14 +1073,14 @@ func (m WelcomeModel) handleSelection() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m WelcomeModel) launchWithDomain(domain string) (tea.Model, tea.Cmd) {
+func (m *WelcomeModel) launchWithDomain(domain string) (tea.Model, tea.Cmd) {
 	// Clean up domain input
 	domain = strings.TrimSpace(domain)
 	domain = strings.TrimPrefix(strings.TrimPrefix(domain, "http://"), "https://")
 	
 	if m.inputMode == "ping" || m.inputMode == "" {
 		// Launch ping
-		pingModel := PingModel{
+		pingModel := &PingModel{
 			url:       "https://" + domain,
 			running:   true,
 			count:     0, // Continuous
@@ -1094,15 +1101,13 @@ func (m WelcomeModel) launchWithDomain(domain string) (tea.Model, tea.Cmd) {
 		})
 	} else {
 		// Launch info menu
-		infoModel := NewInfoModel(domain)
-		infoModel.width = m.width
-		infoModel.height = m.height
+		infoModel := NewInfoModelWithSize(domain, m.width, m.height)
 		infoModel.fromWelcome = true
 		return infoModel, nil
 	}
 }
 
-func (m WelcomeModel) View() string {
+func (m *WelcomeModel) View() string {
 	if m.quit {
 		return ""
 	}
@@ -1237,7 +1242,7 @@ type HelpModel struct {
 }
 
 // NewHelpModel creates a new help model
-func NewHelpModel() HelpModel {
+func NewHelpModel() *HelpModel {
 	content := []string{
 		"🚀 htping - HTTP Ping Tool with Beautiful TUI",
 		"",
@@ -1326,17 +1331,17 @@ func NewHelpModel() HelpModel {
 		"For more information, visit: https://github.com/kubblai/htping",
 	}
 
-	return HelpModel{
+	return &HelpModel{
 		content: content,
 		scroll:  0,
 	}
 }
 
-func (m HelpModel) Init() tea.Cmd {
+func (m *HelpModel) Init() tea.Cmd {
 	return tea.WindowSize()
 }
 
-func (m HelpModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *HelpModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -1345,9 +1350,7 @@ func (m HelpModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "esc", "b", "w":
 			// Go back to welcome
-			welcomeModel := NewWelcomeModel()
-			welcomeModel.width = m.width
-			welcomeModel.height = m.height
+			welcomeModel := NewWelcomeModelWithSize(m.width, m.height)
 			return welcomeModel, nil
 		case "up", "k":
 			if m.scroll > 0 {
@@ -1377,7 +1380,7 @@ func (m HelpModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m HelpModel) View() string {
+func (m *HelpModel) View() string {
 	if m.quit {
 		return ""
 	}
