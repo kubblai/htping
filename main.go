@@ -68,9 +68,9 @@ type CacheEntry struct {
 
 // ResponseCache provides thread-safe caching for HTTP responses
 type ResponseCache struct {
-	cache    map[string]*CacheEntry
-	mutex    sync.RWMutex
-	ttl      time.Duration
+	cache map[string]*CacheEntry
+	mutex sync.RWMutex
+	ttl   time.Duration
 }
 
 // NewResponseCache creates a new response cache with specified TTL
@@ -85,18 +85,18 @@ func NewResponseCache(ttl time.Duration) *ResponseCache {
 func (c *ResponseCache) Get(key string) (*CacheEntry, bool) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	entry, exists := c.cache[key]
 	if !exists {
 		return nil, false
 	}
-	
+
 	// Check if entry is expired
 	if time.Since(entry.Timestamp) > c.ttl {
 		delete(c.cache, key)
 		return nil, false
 	}
-	
+
 	return entry, true
 }
 
@@ -104,7 +104,7 @@ func (c *ResponseCache) Get(key string) (*CacheEntry, bool) {
 func (c *ResponseCache) Set(key string, entry *CacheEntry) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.cache[key] = entry
 }
 
@@ -112,7 +112,7 @@ func (c *ResponseCache) Set(key string, entry *CacheEntry) {
 func (c *ResponseCache) Clear() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.cache = make(map[string]*CacheEntry)
 }
 
@@ -128,10 +128,10 @@ var globalCache = NewResponseCache(5 * time.Minute)
 
 // AuthConfig holds authentication configuration
 type AuthConfig struct {
-	BasicAuth   BasicAuthConfig
-	CookieAuth  string
-	UseBasic    bool
-	UseCookie   bool
+	BasicAuth  BasicAuthConfig
+	CookieAuth string
+	UseBasic   bool
+	UseCookie  bool
 }
 
 // BasicAuthConfig holds basic authentication credentials
@@ -147,7 +147,7 @@ func configureAuthentication(req *http.Request, authConfig AuthConfig) {
 		encoded := base64.StdEncoding.EncodeToString([]byte(auth))
 		req.Header.Set("Authorization", "Basic "+encoded)
 	}
-	
+
 	if authConfig.UseCookie && authConfig.CookieAuth != "" {
 		req.Header.Set("Cookie", authConfig.CookieAuth)
 	}
@@ -155,31 +155,31 @@ func configureAuthentication(req *http.Request, authConfig AuthConfig) {
 
 // ReportData contains all data for comprehensive reporting
 type ReportData struct {
-	Metadata    ReportMetadata    `json:"metadata"`
-	Target      TargetInfo       `json:"target"`
-	PingResults PingResults      `json:"ping_results"`
-	InfoData    InfoData         `json:"info_data"`
-	Statistics  Statistics       `json:"statistics"`
-	Generated   time.Time        `json:"generated"`
+	Metadata    ReportMetadata `json:"metadata"`
+	Target      TargetInfo     `json:"target"`
+	PingResults PingResults    `json:"ping_results"`
+	InfoData    InfoData       `json:"info_data"`
+	Statistics  Statistics     `json:"statistics"`
+	Generated   time.Time      `json:"generated"`
 }
 
 // ReportMetadata contains information about the report
 type ReportMetadata struct {
-	Tool        string    `json:"tool"`
-	Version     string    `json:"version"`
-	Command     string    `json:"command"`
-	Duration    string    `json:"duration"`
-	ReportType  string    `json:"report_type"`
+	Tool       string `json:"tool"`
+	Version    string `json:"version"`
+	Command    string `json:"command"`
+	Duration   string `json:"duration"`
+	ReportType string `json:"report_type"`
 }
 
 // TargetInfo contains information about the target URL
 type TargetInfo struct {
-	URL          string            `json:"url"`
-	Host         string            `json:"host"`
-	Protocol     string            `json:"protocol"`
-	Port         string            `json:"port,omitempty"`
-	Authentication AuthInfo        `json:"authentication,omitempty"`
-	Options      TargetOptions    `json:"options"`
+	URL            string        `json:"url"`
+	Host           string        `json:"host"`
+	Protocol       string        `json:"protocol"`
+	Port           string        `json:"port,omitempty"`
+	Authentication *AuthInfo     `json:"authentication,omitempty"`
+	Options        TargetOptions `json:"options"`
 }
 
 // AuthInfo contains authentication details (sanitized)
@@ -192,156 +192,156 @@ type AuthInfo struct {
 
 // TargetOptions contains request options
 type TargetOptions struct {
-	Interval   string `json:"interval"`
-	Count      int    `json:"count"`
-	UseCache   bool   `json:"use_cache"`
-	Timeout    string `json:"timeout"`
+	Interval string `json:"interval"`
+	Count    int    `json:"count"`
+	UseCache bool   `json:"use_cache"`
+	Timeout  string `json:"timeout"`
 }
 
 // PingResults contains all ping response data
 type PingResults struct {
 	Responses []DetailedPingResponse `json:"responses"`
-	Summary   PingSummary           `json:"summary"`
+	Summary   PingSummary            `json:"summary"`
 }
 
 // DetailedPingResponse extends PingResponse with additional data
 type DetailedPingResponse struct {
 	PingResponse
-	Index       int           `json:"index"`
-	FromCache   bool          `json:"from_cache"`
-	Headers     http.Header   `json:"headers,omitempty"`
-	ContentType string        `json:"content_type,omitempty"`
-	ContentSize int64         `json:"content_size,omitempty"`
+	Index       int         `json:"index"`
+	FromCache   bool        `json:"from_cache"`
+	Headers     http.Header `json:"headers,omitempty"`
+	ContentType string      `json:"content_type,omitempty"`
+	ContentSize int64       `json:"content_size,omitempty"`
 }
 
 // PingSummary contains aggregated ping statistics
 type PingSummary struct {
-	TotalPings    int           `json:"total_pings"`
-	Successful    int           `json:"successful"`
-	Failed        int           `json:"failed"`
-	CachedHits    int           `json:"cached_hits"`
-	AvgDuration   time.Duration `json:"avg_duration"`
-	MinDuration   time.Duration `json:"min_duration"`
-	MaxDuration   time.Duration `json:"max_duration"`
-	SuccessRate   float64       `json:"success_rate"`
+	TotalPings  int           `json:"total_pings"`
+	Successful  int           `json:"successful"`
+	Failed      int           `json:"failed"`
+	CachedHits  int           `json:"cached_hits"`
+	AvgDuration time.Duration `json:"avg_duration"`
+	MinDuration time.Duration `json:"min_duration"`
+	MaxDuration time.Duration `json:"max_duration"`
+	SuccessRate float64       `json:"success_rate"`
 }
 
 // InfoData contains all information gathering results
 type InfoData struct {
-	DNS         DNSInfo         `json:"dns,omitempty"`
-	IP          IPInfo          `json:"ip,omitempty"`
-	Certificate CertificateInfo `json:"certificate,omitempty"`
-	WHOIS       WHOISInfo       `json:"whois,omitempty"`
-	Resources   *ResourceStats  `json:"resources,omitempty"`
+	DNS         *DNSInfo            `json:"dns,omitempty"`
+	IP          *IPInfo             `json:"ip,omitempty"`
+	Certificate *CertificateInfo    `json:"certificate,omitempty"`
+	WHOIS       *WHOISInfo          `json:"whois,omitempty"`
+	Resources   *ResourceStats      `json:"resources,omitempty"`
 	Performance *PerformanceMetrics `json:"performance,omitempty"`
-	Geolocation *GeoLocation    `json:"geolocation,omitempty"`
+	Geolocation *GeoLocation        `json:"geolocation,omitempty"`
 }
 
 // DNSInfo contains DNS lookup results
 type DNSInfo struct {
-	Nameservers []string  `json:"nameservers"`
+	Nameservers []string      `json:"nameservers"`
 	LookupTime  time.Duration `json:"lookup_time"`
-	Error       string    `json:"error,omitempty"`
+	Error       string        `json:"error,omitempty"`
 }
 
 // IPInfo contains IP resolution results
 type IPInfo struct {
-	Addresses   []string      `json:"addresses"`
-	IPv4        []string      `json:"ipv4"`
-	IPv6        []string      `json:"ipv6"`
-	LookupTime  time.Duration `json:"lookup_time"`
-	Error       string        `json:"error,omitempty"`
+	Addresses  []string      `json:"addresses"`
+	IPv4       []string      `json:"ipv4"`
+	IPv6       []string      `json:"ipv6"`
+	LookupTime time.Duration `json:"lookup_time"`
+	Error      string        `json:"error,omitempty"`
 }
 
 // CertificateInfo contains TLS certificate details
 type CertificateInfo struct {
-	Subject        string    `json:"subject"`
-	Issuer         string    `json:"issuer"`
-	NotBefore      time.Time `json:"not_before"`
-	NotAfter       time.Time `json:"not_after"`
-	IsValid        bool      `json:"is_valid"`
-	DaysUntilExpiry int      `json:"days_until_expiry"`
-	SignatureAlg   string    `json:"signature_algorithm"`
-	Error          string    `json:"error,omitempty"`
+	Subject         string    `json:"subject"`
+	Issuer          string    `json:"issuer"`
+	NotBefore       time.Time `json:"not_before"`
+	NotAfter        time.Time `json:"not_after"`
+	IsValid         bool      `json:"is_valid"`
+	DaysUntilExpiry int       `json:"days_until_expiry"`
+	SignatureAlg    string    `json:"signature_algorithm"`
+	Error           string    `json:"error,omitempty"`
 }
 
 // WHOISInfo contains WHOIS lookup results
 type WHOISInfo struct {
-	Domain      string        `json:"domain"`
-	RawData     string        `json:"raw_data"`
-	LookupTime  time.Duration `json:"lookup_time"`
-	Error       string        `json:"error,omitempty"`
+	Domain     string        `json:"domain"`
+	RawData    string        `json:"raw_data"`
+	LookupTime time.Duration `json:"lookup_time"`
+	Error      string        `json:"error,omitempty"`
 }
 
 // Statistics contains overall statistics
 type Statistics struct {
-	TotalDuration    time.Duration `json:"total_duration"`
-	AverageInterval  time.Duration `json:"average_interval"`
-	DataTransferred  int64         `json:"data_transferred"`
-	RequestsPerSecond float64      `json:"requests_per_second"`
+	TotalDuration     time.Duration `json:"total_duration"`
+	AverageInterval   time.Duration `json:"average_interval"`
+	DataTransferred   int64         `json:"data_transferred"`
+	RequestsPerSecond float64       `json:"requests_per_second"`
 }
 
 // PingModel represents the state of the ping TUI
 type PingModel struct {
-	url              string
-	responses        []PingResponse
+	url               string
+	responses         []PingResponse
 	detailedResponses []DetailedPingResponse
-	running          bool
-	count            int
-	current          int
-	useHTTP          bool
-	showHTML         bool
-	outputFile       string
-	client           *http.Client
-	ip               string
-	startTime        time.Time
-	successCount     int
-	totalDuration    time.Duration
-	width            int
-	height           int
-	authConfig       AuthConfig
-	useCache         bool
-	interval         time.Duration
-	reportData       *ReportData
-	exportJSON       string
-	exportHTML       string
-	exportStatus     string
+	running           bool
+	count             int
+	current           int
+	useHTTP           bool
+	showHTML          bool
+	outputFile        string
+	client            *http.Client
+	ip                string
+	startTime         time.Time
+	successCount      int
+	totalDuration     time.Duration
+	width             int
+	height            int
+	authConfig        AuthConfig
+	useCache          bool
+	interval          time.Duration
+	reportData        *ReportData
+	exportJSON        string
+	exportHTML        string
+	exportStatus      string
 }
 
 // PingResponse represents a single ping response
 type PingResponse struct {
-	StatusCode int
-	Duration   time.Duration
-	Error      error
-	Timestamp  time.Time
-	Resources  *ResourceStats     `json:"resources,omitempty"`
+	StatusCode  int
+	Duration    time.Duration
+	Error       error
+	Timestamp   time.Time
+	Resources   *ResourceStats      `json:"resources,omitempty"`
 	Performance *PerformanceMetrics `json:"performance,omitempty"`
 }
 
 // ResourceStats contains page resource statistics
 type ResourceStats struct {
-	TotalResources int              `json:"total_resources"`
-	Images         int              `json:"images"`
-	Scripts        int              `json:"scripts"`
-	Stylesheets    int              `json:"stylesheets"`
-	Links          int              `json:"links"`
-	ContentLength  int64            `json:"content_length"`
-	ResourceTypes  map[string]int   `json:"resource_types"`
-	ExternalHosts  map[string]int   `json:"external_hosts"`
-	TotalSize      int64            `json:"total_size"`
+	TotalResources int            `json:"total_resources"`
+	Images         int            `json:"images"`
+	Scripts        int            `json:"scripts"`
+	Stylesheets    int            `json:"stylesheets"`
+	Links          int            `json:"links"`
+	ContentLength  int64          `json:"content_length"`
+	ResourceTypes  map[string]int `json:"resource_types"`
+	ExternalHosts  map[string]int `json:"external_hosts"`
+	TotalSize      int64          `json:"total_size"`
 }
 
 // PerformanceMetrics contains detailed performance data
 type PerformanceMetrics struct {
-	DNSLookup     time.Duration `json:"dns_lookup"`
-	TCPConnect    time.Duration `json:"tcp_connect"`
-	TLSHandshake  time.Duration `json:"tls_handshake"`
-	ServerProcess time.Duration `json:"server_process"`
+	DNSLookup       time.Duration `json:"dns_lookup"`
+	TCPConnect      time.Duration `json:"tcp_connect"`
+	TLSHandshake    time.Duration `json:"tls_handshake"`
+	ServerProcess   time.Duration `json:"server_process"`
 	ContentTransfer time.Duration `json:"content_transfer"`
-	FirstByteTime time.Duration `json:"first_byte_time"`
-	ResponseSize  int64         `json:"response_size"`
-	Redirects     int           `json:"redirects"`
-	Protocol      string        `json:"protocol"`
+	FirstByteTime   time.Duration `json:"first_byte_time"`
+	ResponseSize    int64         `json:"response_size"`
+	Redirects       int           `json:"redirects"`
+	Protocol        string        `json:"protocol"`
 }
 
 // GeoLocation contains geographical information
@@ -465,26 +465,30 @@ func (m *PingModel) generateReport() {
 
 	// Fill in target information
 	parsedURL, _ := url.Parse(m.url)
-	authInfo := AuthInfo{}
-	if m.authConfig.UseBasic {
-		authInfo.Type = "basic"
-		authInfo.Username = m.authConfig.BasicAuth.Username
-		authInfo.HasPassword = m.authConfig.BasicAuth.Password != ""
-	}
-	if m.authConfig.UseCookie {
-		if authInfo.Type != "" {
-			authInfo.Type += "+cookie"
-		} else {
-			authInfo.Type = "cookie"
+	var authInfo *AuthInfo
+	if m.authConfig.UseBasic || m.authConfig.UseCookie {
+		info := AuthInfo{}
+		if m.authConfig.UseBasic {
+			info.Type = "basic"
+			info.Username = m.authConfig.BasicAuth.Username
+			info.HasPassword = m.authConfig.BasicAuth.Password != ""
 		}
-		authInfo.HasCookie = true
+		if m.authConfig.UseCookie {
+			if info.Type != "" {
+				info.Type += "+cookie"
+			} else {
+				info.Type = "cookie"
+			}
+			info.HasCookie = true
+		}
+		authInfo = &info
 	}
 
 	m.reportData.Target = TargetInfo{
-		URL:      m.url,
-		Host:     parsedURL.Host,
-		Protocol: parsedURL.Scheme,
-		Port:     parsedURL.Port(),
+		URL:            m.url,
+		Host:           parsedURL.Host,
+		Protocol:       parsedURL.Scheme,
+		Port:           parsedURL.Port(),
 		Authentication: authInfo,
 		Options: TargetOptions{
 			Interval: m.interval.String(),
@@ -499,7 +503,7 @@ func (m *PingModel) generateReport() {
 	var totalDuration time.Duration
 	successCount := 0
 	cachedCount := 0
-	
+
 	if len(m.detailedResponses) > 0 {
 		minDuration = time.Duration(1<<63 - 1) // Max duration
 		for _, resp := range m.detailedResponses {
@@ -546,7 +550,7 @@ func (m *PingModel) generateReport() {
 	for _, resp := range m.detailedResponses {
 		totalDataTransferred += resp.ContentSize
 	}
-	
+
 	requestsPerSecond := float64(len(m.detailedResponses)) / time.Since(m.startTime).Seconds()
 
 	m.reportData.Statistics = Statistics{
@@ -563,7 +567,7 @@ func (m *PingModel) generateReport() {
 
 	// Set export status for TUI display
 	var exportedFiles []string
-	
+
 	// Export to JSON if requested
 	if m.exportJSON != "" {
 		err := exportJSONReportTUI(m.reportData, m.exportJSON)
@@ -579,7 +583,7 @@ func (m *PingModel) generateReport() {
 			exportedFiles = append(exportedFiles, "📈 HTML: "+m.exportHTML)
 		}
 	}
-	
+
 	// Update export status for TUI display
 	if len(exportedFiles) > 0 {
 		m.exportStatus = "✅ Reports exported:\n" + strings.Join(exportedFiles, "\n")
@@ -706,12 +710,12 @@ func (m *PingModel) renderContent(width, height int) string {
 		strings.Join(recentResponses, "\n") + "\n\n" +
 		stats + "\n\n" +
 		status + "\n\n"
-	
+
 	// Add export status if reports were exported
 	if m.exportStatus != "" {
 		content += successStyle.Render(m.exportStatus) + "\n\n"
 	}
-	
+
 	content += controls
 
 	return m.fitToTerminal(content, width, height)
@@ -732,7 +736,7 @@ func (m *PingModel) fitToTerminal(content string, width, height int) string {
 func (m *PingModel) performPing() tea.Cmd {
 	return func() tea.Msg {
 		start := time.Now()
-		
+
 		// Generate cache key
 		authString := ""
 		if m.authConfig.UseBasic {
@@ -742,13 +746,13 @@ func (m *PingModel) performPing() tea.Cmd {
 			authString += ":" + m.authConfig.CookieAuth
 		}
 		cacheKey := generateCacheKey(m.url, authString)
-		
+
 		var fromCache bool
 		var body []byte
 		var headers http.Header
 		var contentType string
 		var contentSize int64
-		
+
 		// Check cache first if enabled
 		if m.useCache {
 			if entry, found := globalCache.Get(cacheKey); found {
@@ -760,7 +764,7 @@ func (m *PingModel) performPing() tea.Cmd {
 				if ct := headers.Get("Content-Type"); ct != "" {
 					contentType = ct
 				}
-				
+
 				// Create detailed response for reporting
 				detailedResp := DetailedPingResponse{
 					PingResponse: PingResponse{
@@ -769,12 +773,12 @@ func (m *PingModel) performPing() tea.Cmd {
 						Timestamp:  time.Now(),
 					},
 					Index:       m.current + 1,
-					FromCache:   true,
+					FromCache:   fromCache,
 					Headers:     headers,
 					ContentType: contentType,
 					ContentSize: contentSize,
 				}
-				
+
 				return PingResultMsg{
 					Response: PingResponse{
 						StatusCode: entry.StatusCode,
@@ -795,10 +799,10 @@ func (m *PingModel) performPing() tea.Cmd {
 					Duration:  time.Since(start),
 					Timestamp: time.Now(),
 				},
-				Index:       m.current + 1,
-				FromCache:   false,
+				Index:     m.current + 1,
+				FromCache: false,
 			}
-			
+
 			return PingResultMsg{
 				Response: PingResponse{
 					Error:     err,
@@ -823,10 +827,10 @@ func (m *PingModel) performPing() tea.Cmd {
 					Duration:  duration,
 					Timestamp: time.Now(),
 				},
-				Index:       m.current + 1,
-				FromCache:   false,
+				Index:     m.current + 1,
+				FromCache: false,
 			}
-			
+
 			return PingResultMsg{
 				Response: PingResponse{
 					Error:     err,
@@ -838,15 +842,16 @@ func (m *PingModel) performPing() tea.Cmd {
 		}
 
 		statusCode := resp.StatusCode
-<<<<<<< Updated upstream
 		headers = resp.Header
 		contentType = headers.Get("Content-Type")
-		
+
 		// Read body for caching and size calculation
 		body, _ = io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
 		contentSize = int64(len(body))
-		
+
 		// Cache the response if caching is enabled
 		if m.useCache {
 			entry := &CacheEntry{
@@ -871,10 +876,6 @@ func (m *PingModel) performPing() tea.Cmd {
 			Headers:     headers,
 			ContentType: contentType,
 			ContentSize: contentSize,
-=======
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
->>>>>>> Stashed changes
 		}
 
 		return PingResultMsg{
@@ -891,17 +892,17 @@ func (m *PingModel) performPing() tea.Cmd {
 // collectAllInfoData collects comprehensive information about a URL
 func collectAllInfoData(targetURL string) InfoData {
 	infoData := InfoData{}
-	
+
 	// Extract host from URL
 	host := extractHostFromURL(targetURL)
-	
+
 	// DNS Information
 	start := time.Now()
 	ns, err := net.LookupNS(host)
 	dnsLookupTime := time.Since(start)
-	
+
 	if err != nil {
-		infoData.DNS = DNSInfo{
+		infoData.DNS = &DNSInfo{
 			LookupTime: dnsLookupTime,
 			Error:      err.Error(),
 		}
@@ -910,19 +911,19 @@ func collectAllInfoData(targetURL string) InfoData {
 		for i, server := range ns {
 			nameservers[i] = server.Host
 		}
-		infoData.DNS = DNSInfo{
+		infoData.DNS = &DNSInfo{
 			Nameservers: nameservers,
 			LookupTime:  dnsLookupTime,
 		}
 	}
-	
+
 	// IP Information
 	start = time.Now()
 	ips, err := net.LookupIP(host)
 	ipLookupTime := time.Since(start)
-	
+
 	if err != nil {
-		infoData.IP = IPInfo{
+		infoData.IP = &IPInfo{
 			LookupTime: ipLookupTime,
 			Error:      err.Error(),
 		}
@@ -936,29 +937,33 @@ func collectAllInfoData(targetURL string) InfoData {
 				ipv6 = append(ipv6, ip.String())
 			}
 		}
-		infoData.IP = IPInfo{
+		infoData.IP = &IPInfo{
 			Addresses:  all,
 			IPv4:       ipv4,
 			IPv6:       ipv6,
 			LookupTime: ipLookupTime,
 		}
 	}
-	
+
 	// Certificate Information (only for HTTPS)
 	if strings.HasPrefix(targetURL, "https://") || (!strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://")) {
 		conn, err := tls.Dial("tcp", host+":443", nil)
 		if err != nil {
-			infoData.Certificate = CertificateInfo{
+			infoData.Certificate = &CertificateInfo{
 				Error: err.Error(),
 			}
 		} else {
-			defer conn.Close()
+			defer func() {
+				if err := conn.Close(); err != nil {
+					fmt.Printf("Error closing connection: %v\n", err)
+				}
+			}()
 			cert := conn.ConnectionState().PeerCertificates[0]
 			now := time.Now()
 			isValid := now.After(cert.NotBefore) && now.Before(cert.NotAfter)
 			daysUntilExpiry := int(cert.NotAfter.Sub(now).Hours() / 24)
-			
-			infoData.Certificate = CertificateInfo{
+
+			infoData.Certificate = &CertificateInfo{
 				Subject:         cert.Subject.String(),
 				Issuer:          cert.Issuer.String(),
 				NotBefore:       cert.NotBefore,
@@ -969,48 +974,52 @@ func collectAllInfoData(targetURL string) InfoData {
 			}
 		}
 	}
-	
+
 	// WHOIS Information
 	start = time.Now()
 	rootDomain := getRootDomain(host)
 	whoisResult, err := whois.Whois(rootDomain)
 	whoisLookupTime := time.Since(start)
-	
+
 	if err != nil {
-		infoData.WHOIS = WHOISInfo{
+		infoData.WHOIS = &WHOISInfo{
 			Domain:     rootDomain,
 			LookupTime: whoisLookupTime,
 			Error:      err.Error(),
 		}
 	} else {
-		infoData.WHOIS = WHOISInfo{
+		infoData.WHOIS = &WHOISInfo{
 			Domain:     rootDomain,
 			RawData:    whoisResult,
 			LookupTime: whoisLookupTime,
 		}
 	}
-	
+
 	// Resource Statistics
 	if !hasProtocol(targetURL) {
 		targetURL = "https://" + targetURL
 	}
-	
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(targetURL)
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				fmt.Printf("Error closing response body: %v\n", err)
+			}
+		}()
 		body, err := io.ReadAll(resp.Body)
 		if err == nil {
 			infoData.Resources = collectResourceStats(string(body), targetURL)
 		}
 	}
-	
+
 	// Performance Metrics
 	perfMetrics, err := collectPerformanceMetrics(targetURL, client)
 	if err == nil {
 		infoData.Performance = perfMetrics
 	}
-	
+
 	// Geolocation Information
 	if len(infoData.IP.Addresses) > 0 {
 		geoData, err := fetchGeoLocation(infoData.IP.Addresses[0])
@@ -1018,7 +1027,7 @@ func collectAllInfoData(targetURL string) InfoData {
 			infoData.Geolocation = geoData
 		}
 	}
-	
+
 	return infoData
 }
 
@@ -1082,7 +1091,6 @@ func exportHTMLReport(reportData *ReportData, filename string) error {
 			return t.Format("2006-01-02 15:04:05")
 		},
 	}).Parse(htmlReportTemplate)
-
 	if err != nil {
 		fmt.Printf("Error parsing HTML template: %v\n", err)
 		return err
@@ -1823,7 +1831,6 @@ func main() {
 	pingCmd.Flags().BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
 	pingCmd.Flags().BoolVar(&showHTMLFlag, "html", false, "Show HTML content after pings")
 	pingCmd.Flags().StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html")
-<<<<<<< Updated upstream
 	pingCmd.Flags().BoolVar(&showResourceStats, "resourcestats", false, "Show page resource statistics after pings")
 	pingCmd.Flags().BoolVar(&showPerformanceMetrics, "performance", false, "Show performance metrics after pings")
 	pingCmd.Flags().BoolVar(&showGeolocation, "geolocation", false, "Show geolocation information after pings")
@@ -1834,10 +1841,7 @@ func main() {
 	pingCmd.Flags().IntVarP(&pingInterval, "interval", "i", 1, "Ping interval in seconds")
 	pingCmd.Flags().StringVar(&exportJSON, "export-json", "", "Export results to JSON file")
 	pingCmd.Flags().StringVar(&exportHTML, "export-html", "", "Export results to HTML report")
-	
-=======
 
->>>>>>> Stashed changes
 	// Add the same flags to root command for default ping behavior
 	rootCmd.Flags().IntVarP(&pingCount, "count", "c", 0, "Number of pings to perform (0 for continuous)")
 	rootCmd.Flags().BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
@@ -1867,21 +1871,25 @@ func main() {
 			if !hasProtocol(targetURL) {
 				targetURL = "https://" + targetURL
 			}
-			
+
 			client := &http.Client{Timeout: 10 * time.Second}
 			resp, err := client.Get(targetURL)
 			if err != nil {
 				fmt.Printf("Error fetching page: %v\n", err)
 				return
 			}
-			defer resp.Body.Close()
-			
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					fmt.Printf("Error closing response body: %v\n", err)
+				}
+			}()
+
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
 				fmt.Printf("Error reading page: %v\n", err)
 				return
 			}
-			
+
 			stats := collectResourceStats(string(body), targetURL)
 			fmt.Printf("📊 Resource Statistics for %s:\n\n", targetURL)
 			fmt.Printf("  Total Resources: %d\n", stats.TotalResources)
@@ -1891,7 +1899,7 @@ func main() {
 			fmt.Printf("  Links: %d\n", stats.Links)
 			fmt.Printf("  Content Length: %d bytes\n", stats.ContentLength)
 			fmt.Printf("  External Hosts: %d\n", len(stats.ExternalHosts))
-			
+
 			if len(stats.ExternalHosts) > 0 {
 				fmt.Printf("\nExternal Hosts:\n")
 				for host, count := range stats.ExternalHosts {
@@ -1910,14 +1918,14 @@ func main() {
 			if !hasProtocol(targetURL) {
 				targetURL = "https://" + targetURL
 			}
-			
+
 			client := &http.Client{Timeout: 10 * time.Second}
 			perfMetrics, err := collectPerformanceMetrics(targetURL, client)
 			if err != nil {
 				fmt.Printf("Error collecting metrics: %v\n", err)
 				return
 			}
-			
+
 			fmt.Printf("⚡ Performance Metrics for %s:\n\n", targetURL)
 			fmt.Printf("  DNS Lookup: %v\n", perfMetrics.DNSLookup)
 			fmt.Printf("  TCP Connect: %v\n", perfMetrics.TCPConnect)
@@ -1926,7 +1934,7 @@ func main() {
 			fmt.Printf("  Content Transfer: %v\n", perfMetrics.ContentTransfer)
 			fmt.Printf("  Response Size: %d bytes\n", perfMetrics.ResponseSize)
 			fmt.Printf("  Protocol: %s\n", perfMetrics.Protocol)
-			
+
 			if perfMetrics.ServerProcess > 0 {
 				fmt.Printf("  Server Process: %v\n", perfMetrics.ServerProcess)
 			}
@@ -1948,7 +1956,7 @@ func main() {
 				fmt.Printf("No IP addresses found for %s\n", domain)
 				return
 			}
-			
+
 			ip := ips[0].String()
 			geoData, err := fetchGeoLocation(ip)
 			if err != nil {
@@ -1959,7 +1967,7 @@ func main() {
 				fmt.Printf("Geolocation failed: %s\n", geoData.Message)
 				return
 			}
-			
+
 			fmt.Printf("🌍 Geolocation for %s (%s):\n\n", domain, ip)
 			fmt.Printf("  Country: %s (%s)\n", geoData.Country, geoData.CountryCode)
 			fmt.Printf("  Region: %s (%s)\n", geoData.RegionName, geoData.Region)
@@ -1968,7 +1976,7 @@ func main() {
 			fmt.Printf("  Timezone: %s\n", geoData.Timezone)
 			fmt.Printf("  ISP: %s\n", geoData.ISP)
 			fmt.Printf("  Organization: %s\n", geoData.Org)
-			
+
 			if geoData.Zip != "" {
 				fmt.Printf("  ZIP: %s\n", geoData.Zip)
 			}
@@ -2058,12 +2066,12 @@ func collectResourceStats(htmlContent string, baseURL string) *ResourceStats {
 			if err != nil {
 				continue
 			}
-			
+
 			// Resolve relative URLs
 			if !resourceURL.IsAbs() {
 				resourceURL = parsedBase.ResolveReference(resourceURL)
 			}
-			
+
 			// Check if external
 			if resourceURL.Host != "" && resourceURL.Host != parsedBase.Host {
 				stats.ExternalHosts[resourceURL.Host]++
@@ -2078,13 +2086,13 @@ func collectResourceStats(htmlContent string, baseURL string) *ResourceStats {
 // collectPerformanceMetrics measures detailed timing metrics during HTTP request
 func collectPerformanceMetrics(targetURL string, client *http.Client) (*PerformanceMetrics, error) {
 	metrics := &PerformanceMetrics{}
-	
+
 	// Parse URL to get host
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	host := parsedURL.Host
 	if !strings.Contains(host, ":") {
 		if parsedURL.Scheme == "https" {
@@ -2116,13 +2124,17 @@ func collectPerformanceMetrics(targetURL string, client *http.Client) (*Performa
 		tlsConn := tls.Client(conn, &tls.Config{ServerName: parsedURL.Hostname()})
 		err = tlsConn.Handshake()
 		if err != nil {
-			conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				fmt.Printf("Error closing connection: %v\n", closeErr)
+			}
 			return nil, err
 		}
 		metrics.TLSHandshake = time.Since(tlsStart)
 		conn = tlsConn
 	}
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		fmt.Printf("Error closing connection: %v\n", err)
+	}
 
 	// Perform actual HTTP request with timing
 	req, err := http.NewRequest("GET", targetURL, nil)
@@ -2135,8 +2147,12 @@ func collectPerformanceMetrics(targetURL string, client *http.Client) (*Performa
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
+
 	firstByteTime := time.Since(requestStart)
 	metrics.FirstByteTime = firstByteTime
 
@@ -2148,12 +2164,12 @@ func collectPerformanceMetrics(targetURL string, client *http.Client) (*Performa
 	}
 	metrics.ContentTransfer = time.Since(bodyStart)
 	metrics.ResponseSize = int64(len(body))
-	
+
 	// Calculate server processing time (approximation)
 	metrics.ServerProcess = firstByteTime - metrics.DNSLookup - metrics.TCPConnect - metrics.TLSHandshake
-	
+
 	metrics.Protocol = resp.Proto
-	
+
 	// Count redirects by checking history
 	if client.CheckRedirect != nil {
 		// This is a simplified approach - in practice you'd need to implement redirect tracking
@@ -2167,34 +2183,38 @@ func collectPerformanceMetrics(targetURL string, client *http.Client) (*Performa
 func fetchGeoLocation(ipAddress string) (*GeoLocation, error) {
 	// Using ip-api.com free service (no API key required)
 	apiURL := fmt.Sprintf("http://ip-api.com/json/%s", ipAddress)
-	
+
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	
+
 	resp, err := client.Get(apiURL)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("geolocation API returned status: %d", resp.StatusCode)
 	}
-	
+
 	var geoData GeoLocation
 	decoder := json.NewDecoder(resp.Body)
 	err = decoder.Decode(&geoData)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// ip-api.com uses "success" field instead of a Success boolean
 	// We need to map their response format to our struct
 	if geoData.Country != "" {
 		geoData.Success = true
 	}
-	
+
 	return &geoData, nil
 }
 
@@ -2207,27 +2227,31 @@ func enhancedHTTPRequest(targetURL string, client *http.Client) (*http.Response,
 		resp, err := client.Get(targetURL)
 		return resp, nil, nil, err
 	}
-	
+
 	// Perform regular request for content analysis
 	resp, err := client.Get(targetURL)
 	if err != nil {
 		return nil, nil, perfMetrics, err
 	}
-	
+
 	// Read body for resource analysis
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			fmt.Printf("Error closing response body: %v\n", closeErr)
+		}
 		return nil, nil, perfMetrics, err
 	}
-	resp.Body.Close()
-	
+	if err := resp.Body.Close(); err != nil {
+		fmt.Printf("Error closing response body: %v\n", err)
+	}
+
 	// Analyze resources
 	resourceStats := collectResourceStats(string(body), targetURL)
-	
+
 	// Create new response with fresh body reader
 	resp.Body = io.NopCloser(strings.NewReader(string(body)))
-	
+
 	return resp, resourceStats, perfMetrics, nil
 }
 
@@ -2508,13 +2532,17 @@ func (m *InfoModel) fetchInfo() tea.Cmd {
 			if !hasProtocol(targetURL) {
 				targetURL = "https://" + targetURL
 			}
-			
+
 			client := &http.Client{Timeout: 10 * time.Second}
 			resp, err := client.Get(targetURL)
 			if err != nil {
 				result = errorStyle.Render(fmt.Sprintf("Error fetching page: %v", err))
 			} else {
-				defer resp.Body.Close()
+				defer func() {
+					if err := resp.Body.Close(); err != nil {
+						fmt.Printf("Error closing response body: %v\n", err)
+					}
+				}()
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					result = errorStyle.Render(fmt.Sprintf("Error reading page: %v", err))
@@ -2528,7 +2556,7 @@ func (m *InfoModel) fetchInfo() tea.Cmd {
 						fmt.Sprintf("  • Links: %d\n", stats.Links) +
 						fmt.Sprintf("  • Content Length: %d bytes\n", stats.ContentLength) +
 						fmt.Sprintf("  • External Hosts: %d\n", len(stats.ExternalHosts))
-					
+
 					if len(stats.ExternalHosts) > 0 {
 						result += "\n" + warningStyle.Render("External Hosts:") + "\n"
 						for host, count := range stats.ExternalHosts {
@@ -2542,7 +2570,7 @@ func (m *InfoModel) fetchInfo() tea.Cmd {
 			if !hasProtocol(targetURL) {
 				targetURL = "https://" + targetURL
 			}
-			
+
 			client := &http.Client{Timeout: 10 * time.Second}
 			perfMetrics, err := collectPerformanceMetrics(targetURL, client)
 			if err != nil {
@@ -2556,7 +2584,7 @@ func (m *InfoModel) fetchInfo() tea.Cmd {
 					fmt.Sprintf("  • Content Transfer: %v\n", perfMetrics.ContentTransfer) +
 					fmt.Sprintf("  • Response Size: %d bytes\n", perfMetrics.ResponseSize) +
 					fmt.Sprintf("  • Protocol: %s\n", perfMetrics.Protocol)
-				
+
 				if perfMetrics.ServerProcess > 0 {
 					result += fmt.Sprintf("  • Server Process: %v\n", perfMetrics.ServerProcess)
 				}
@@ -2584,7 +2612,7 @@ func (m *InfoModel) fetchInfo() tea.Cmd {
 						fmt.Sprintf("  • Timezone: %s\n", geoData.Timezone) +
 						fmt.Sprintf("  • ISP: %s\n", geoData.ISP) +
 						fmt.Sprintf("  • Organization: %s\n", geoData.Org)
-					
+
 					if geoData.Zip != "" {
 						result += fmt.Sprintf("  • ZIP: %s\n", geoData.Zip)
 					}
@@ -2619,7 +2647,7 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 
 	for i := 0; i < count || count <= 0; i++ {
 		start := time.Now()
-		
+
 		// Generate cache key
 		authString := ""
 		if authConfig.UseBasic {
@@ -2629,10 +2657,10 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 			authString += ":" + authConfig.CookieAuth
 		}
 		cacheKey := generateCacheKey(url, authString)
-		
+
 		var resp *http.Response
 		var fromCache bool
-		
+
 		// Check cache first if enabled
 		if useCache {
 			if entry, found := globalCache.Get(cacheKey); found {
@@ -2641,7 +2669,7 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 				fromCache = true
 				totalDuration += duration
 				successfulPings++
-				
+
 				// Add detailed response for reporting
 				detailedResp := DetailedPingResponse{
 					PingResponse: PingResponse{
@@ -2658,7 +2686,7 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 				detailedResponses = append(detailedResponses, detailedResp)
 			}
 		}
-		
+
 		if !fromCache {
 			// Create request with authentication
 			req, err := http.NewRequest("GET", url, nil)
@@ -2678,7 +2706,6 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 				continue
 			}
 
-<<<<<<< Updated upstream
 			// Configure authentication
 			configureAuthentication(req, authConfig)
 
@@ -2725,11 +2752,13 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 			}
 
 			fmt.Printf("Status: %d %s, Time: %v\n", statusCode, statusText, duration)
-			
+
 			// Read body for caching and size calculation
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			
+			if err := resp.Body.Close(); err != nil {
+				fmt.Printf("Error closing response body: %v\n", err)
+			}
+
 			// Cache the response if caching is enabled
 			if useCache {
 				entry := &CacheEntry{
@@ -2741,7 +2770,7 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 				}
 				globalCache.Set(cacheKey, entry)
 			}
-			
+
 			// Add detailed response for reporting
 			detailedResp := DetailedPingResponse{
 				PingResponse: PingResponse{
@@ -2756,11 +2785,6 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 				ContentSize: int64(len(body)),
 			}
 			detailedResponses = append(detailedResponses, detailedResp)
-=======
-		fmt.Printf("Status: %d %s, Time: %v\n", statusCode, statusText, duration)
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
->>>>>>> Stashed changes
 		}
 
 		if count > 0 && i >= count-1 {
@@ -2798,26 +2822,30 @@ func generateSimpleReport(targetURL string, detailedResponses []DetailedPingResp
 
 	// Fill in target information
 	parsedURL, _ := url.Parse(targetURL)
-	authInfo := AuthInfo{}
-	if authConfig.UseBasic {
-		authInfo.Type = "basic"
-		authInfo.Username = authConfig.BasicAuth.Username
-		authInfo.HasPassword = authConfig.BasicAuth.Password != ""
-	}
-	if authConfig.UseCookie {
-		if authInfo.Type != "" {
-			authInfo.Type += "+cookie"
-		} else {
-			authInfo.Type = "cookie"
+	var authInfo *AuthInfo
+	if authConfig.UseBasic || authConfig.UseCookie {
+		info := AuthInfo{}
+		if authConfig.UseBasic {
+			info.Type = "basic"
+			info.Username = authConfig.BasicAuth.Username
+			info.HasPassword = authConfig.BasicAuth.Password != ""
 		}
-		authInfo.HasCookie = true
+		if authConfig.UseCookie {
+			if info.Type != "" {
+				info.Type += "+cookie"
+			} else {
+				info.Type = "cookie"
+			}
+			info.HasCookie = true
+		}
+		authInfo = &info
 	}
 
 	reportData.Target = TargetInfo{
-		URL:      targetURL,
-		Host:     parsedURL.Host,
-		Protocol: parsedURL.Scheme,
-		Port:     parsedURL.Port(),
+		URL:            targetURL,
+		Host:           parsedURL.Host,
+		Protocol:       parsedURL.Scheme,
+		Port:           parsedURL.Port(),
 		Authentication: authInfo,
 		Options: TargetOptions{
 			Interval: interval.String(),
@@ -2832,7 +2860,7 @@ func generateSimpleReport(targetURL string, detailedResponses []DetailedPingResp
 	var totalDuration time.Duration
 	successCount := 0
 	cachedCount := 0
-	
+
 	if len(detailedResponses) > 0 {
 		minDuration = time.Duration(1<<63 - 1) // Max duration
 		for _, resp := range detailedResponses {
@@ -2879,7 +2907,7 @@ func generateSimpleReport(targetURL string, detailedResponses []DetailedPingResp
 	for _, resp := range detailedResponses {
 		totalDataTransferred += resp.ContentSize
 	}
-	
+
 	requestsPerSecond := float64(len(detailedResponses)) / time.Since(startTime).Seconds()
 
 	reportData.Statistics = Statistics{
@@ -2901,12 +2929,16 @@ func generateSimpleReport(targetURL string, detailedResponses []DetailedPingResp
 
 	// Export to JSON if requested
 	if exportJSON != "" {
-		exportJSONReport(reportData, exportJSON)
+		if err := exportJSONReport(reportData, exportJSON); err != nil {
+			fmt.Printf("Error exporting JSON report: %v\n", err)
+		}
 	}
 
 	// Export to HTML if requested
 	if exportHTML != "" {
-		exportHTMLReport(reportData, exportHTML)
+		if err := exportHTMLReport(reportData, exportHTML); err != nil {
+			fmt.Printf("Error exporting HTML report: %v\n", err)
+		}
 	}
 
 	// Show completion message
@@ -3460,9 +3492,7 @@ func (m *HelpModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "down", "j":
 			maxScroll := len(m.content) - (m.height - 8) // Reserve space for borders and instructions
-			if maxScroll < 0 {
-				maxScroll = 0
-			}
+			maxScroll = max(maxScroll, 0)
 			if m.scroll < maxScroll {
 				m.scroll++
 			}
@@ -3470,9 +3500,7 @@ func (m *HelpModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scroll = 0
 		case "end":
 			maxScroll := len(m.content) - (m.height - 8)
-			if maxScroll < 0 {
-				maxScroll = 0
-			}
+			maxScroll = max(maxScroll, 0)
 			m.scroll = maxScroll
 		}
 	case tea.WindowSizeMsg:
@@ -3549,21 +3577,25 @@ func showResourceStatistics(targetURL string) {
 	if !hasProtocol(targetURL) {
 		targetURL = "https://" + targetURL
 	}
-	
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(targetURL)
 	if err != nil {
 		fmt.Printf("\n📊 Error fetching page resources: %v\n", err)
 		return
 	}
-	defer resp.Body.Close()
-	
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Printf("\n📊 Error reading page: %v\n", err)
 		return
 	}
-	
+
 	stats := collectResourceStats(string(body), targetURL)
 	fmt.Printf("\n📊 Resource Statistics for %s:\n", targetURL)
 	fmt.Printf("  Total Resources: %d\n", stats.TotalResources)
@@ -3573,7 +3605,7 @@ func showResourceStatistics(targetURL string) {
 	fmt.Printf("  Links: %d\n", stats.Links)
 	fmt.Printf("  Content Length: %d bytes\n", stats.ContentLength)
 	fmt.Printf("  External Hosts: %d\n", len(stats.ExternalHosts))
-	
+
 	if len(stats.ExternalHosts) > 0 {
 		fmt.Printf("\nExternal Hosts:\n")
 		for host, count := range stats.ExternalHosts {
@@ -3588,14 +3620,14 @@ func showPerformanceInfo(targetURL string) {
 	if !hasProtocol(targetURL) {
 		targetURL = "https://" + targetURL
 	}
-	
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	perfMetrics, err := collectPerformanceMetrics(targetURL, client)
 	if err != nil {
 		fmt.Printf("\n⚡ Error collecting performance metrics: %v\n", err)
 		return
 	}
-	
+
 	fmt.Printf("\n⚡ Performance Metrics for %s:\n", targetURL)
 	fmt.Printf("  DNS Lookup: %v\n", perfMetrics.DNSLookup)
 	fmt.Printf("  TCP Connect: %v\n", perfMetrics.TCPConnect)
@@ -3604,7 +3636,7 @@ func showPerformanceInfo(targetURL string) {
 	fmt.Printf("  Content Transfer: %v\n", perfMetrics.ContentTransfer)
 	fmt.Printf("  Response Size: %d bytes\n", perfMetrics.ResponseSize)
 	fmt.Printf("  Protocol: %s\n", perfMetrics.Protocol)
-	
+
 	if perfMetrics.ServerProcess > 0 {
 		fmt.Printf("  Server Process: %v\n", perfMetrics.ServerProcess)
 	}
@@ -3623,7 +3655,7 @@ func showGeolocationInfo(targetURL string) {
 		fmt.Printf("\n🌍 No IP addresses found for %s\n", domain)
 		return
 	}
-	
+
 	ip := ips[0].String()
 	geoData, err := fetchGeoLocation(ip)
 	if err != nil {
@@ -3634,7 +3666,7 @@ func showGeolocationInfo(targetURL string) {
 		fmt.Printf("\n🌍 Geolocation failed: %s\n", geoData.Message)
 		return
 	}
-	
+
 	fmt.Printf("\n🌍 Geolocation for %s (%s):\n", domain, ip)
 	fmt.Printf("  Country: %s (%s)\n", geoData.Country, geoData.CountryCode)
 	fmt.Printf("  Region: %s (%s)\n", geoData.RegionName, geoData.Region)
@@ -3643,7 +3675,7 @@ func showGeolocationInfo(targetURL string) {
 	fmt.Printf("  Timezone: %s\n", geoData.Timezone)
 	fmt.Printf("  ISP: %s\n", geoData.ISP)
 	fmt.Printf("  Organization: %s\n", geoData.Org)
-	
+
 	if geoData.Zip != "" {
 		fmt.Printf("  ZIP: %s\n", geoData.Zip)
 	}
