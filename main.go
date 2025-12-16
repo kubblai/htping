@@ -28,33 +28,33 @@ import (
 // Styles for TUI
 var (
 	headerStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#04B575")).
-		Bold(true).
-		Padding(1, 2)
+			Foreground(lipgloss.Color("#04B575")).
+			Bold(true).
+			Padding(1, 2)
 
 	successStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#04B575")).
-		Bold(true)
+			Foreground(lipgloss.Color("#04B575")).
+			Bold(true)
 
 	errorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF6B6B")).
-		Bold(true)
+			Foreground(lipgloss.Color("#FF6B6B")).
+			Bold(true)
 
 	warningStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFD93D")).
-		Bold(true)
+			Foreground(lipgloss.Color("#FFD93D")).
+			Bold(true)
 
 	infoStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6BCF7F"))
+			Foreground(lipgloss.Color("#6BCF7F"))
 
 	statStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#A78BFA")).
-		Bold(true)
+			Foreground(lipgloss.Color("#A78BFA")).
+			Bold(true)
 
 	boxStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(1, 2).
-		BorderForeground(lipgloss.Color("#874BFD"))
+			Border(lipgloss.RoundedBorder()).
+			Padding(1, 2).
+			BorderForeground(lipgloss.Color("#874BFD"))
 )
 
 // CacheEntry represents a cached HTTP response
@@ -606,16 +606,12 @@ func (m *PingModel) renderContent(width, height int) string {
 
 	// Calculate how many responses we can show based on terminal height
 	availableHeight := height - 10 // Reserve space for header, stats, status, and padding
-	if availableHeight < 3 {
-		availableHeight = 3
-	}
+	availableHeight = max(availableHeight, 3)
 
 	// Recent responses (limited by available height)
 	var recentResponses []string
 	start := len(m.responses) - availableHeight
-	if start < 0 {
-		start = 0
-	}
+	start = max(start, 0)
 
 	for i := start; i < len(m.responses); i++ {
 		resp := m.responses[i]
@@ -842,6 +838,7 @@ func (m *PingModel) performPing() tea.Cmd {
 		}
 
 		statusCode := resp.StatusCode
+<<<<<<< Updated upstream
 		headers = resp.Header
 		contentType = headers.Get("Content-Type")
 		
@@ -874,6 +871,10 @@ func (m *PingModel) performPing() tea.Cmd {
 			Headers:     headers,
 			ContentType: contentType,
 			ContentSize: contentSize,
+=======
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+>>>>>>> Stashed changes
 		}
 
 		return PingResultMsg{
@@ -1642,7 +1643,7 @@ func main() {
 			showHTML:   showHTMLFlag,
 			outputFile: outputFilename,
 			client:     client,
-			ip:        ip,
+			ip:         ip,
 			startTime:  time.Now(),
 			authConfig: authConfig,
 			useCache:   useCache,
@@ -1771,7 +1772,11 @@ func main() {
 				fmt.Println("Error:", err)
 				return
 			}
-			defer conn.Close()
+			defer func() {
+				if err := conn.Close(); err != nil {
+					fmt.Printf("Error closing connection: %v\n", err)
+				}
+			}()
 			cert := conn.ConnectionState().PeerCertificates[0]
 			fmt.Printf("Subject: %s\n", cert.Subject)
 			fmt.Printf("Issuer: %s\n", cert.Issuer)
@@ -1818,6 +1823,7 @@ func main() {
 	pingCmd.Flags().BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
 	pingCmd.Flags().BoolVar(&showHTMLFlag, "html", false, "Show HTML content after pings")
 	pingCmd.Flags().StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html")
+<<<<<<< Updated upstream
 	pingCmd.Flags().BoolVar(&showResourceStats, "resourcestats", false, "Show page resource statistics after pings")
 	pingCmd.Flags().BoolVar(&showPerformanceMetrics, "performance", false, "Show performance metrics after pings")
 	pingCmd.Flags().BoolVar(&showGeolocation, "geolocation", false, "Show geolocation information after pings")
@@ -1829,6 +1835,9 @@ func main() {
 	pingCmd.Flags().StringVar(&exportJSON, "export-json", "", "Export results to JSON file")
 	pingCmd.Flags().StringVar(&exportHTML, "export-html", "", "Export results to HTML report")
 	
+=======
+
+>>>>>>> Stashed changes
 	// Add the same flags to root command for default ping behavior
 	rootCmd.Flags().IntVarP(&pingCount, "count", "c", 0, "Number of pings to perform (0 for continuous)")
 	rootCmd.Flags().BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
@@ -2232,10 +2241,10 @@ type InfoModel struct {
 	quit           bool
 	width          int
 	height         int
-	showResult     bool // Track if we're showing result or menu
+	showResult     bool   // Track if we're showing result or menu
 	lastAction     string // Track what info was last requested
-	showPingOption bool // Show option to go to ping
-	fromWelcome    bool // Track if we came from welcome screen
+	showPingOption bool   // Show option to go to ping
+	fromWelcome    bool   // Track if we came from welcome screen
 }
 
 // NewInfoModel creates a new info model
@@ -2300,13 +2309,13 @@ func (m *InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.options[m.selected] == "Start HTTP Ping" {
 					// Switch to ping mode
 					pingModel := &PingModel{
-						url:        "https://" + m.url,
-						running:    true,
-						count:      0, // Continuous
-						client:     &http.Client{Timeout: 10 * time.Second},
-						width:      m.width,
-						height:     m.height,
-						startTime:  time.Now(),
+						url:       "https://" + m.url,
+						running:   true,
+						count:     0, // Continuous
+						client:    &http.Client{Timeout: 10 * time.Second},
+						width:     m.width,
+						height:    m.height,
+						startTime: time.Now(),
 					}
 					// Resolve IP for ping model
 					ips, err := net.LookupIP(m.url)
@@ -2353,7 +2362,7 @@ func (m *InfoModel) View() string {
 	header := headerStyle.Render(fmt.Sprintf("🔍 Info for %s", m.url))
 
 	if m.loading {
-		content := header + "\n\n" + 
+		content := header + "\n\n" +
 			infoStyle.Render(fmt.Sprintf("🔄 Loading %s...", m.lastAction))
 		return m.fitInfoToTerminal(content, width, height)
 	}
@@ -2368,10 +2377,10 @@ func (m *InfoModel) View() string {
 			lines = append(lines, "...")
 			result = strings.Join(lines, "\n")
 		}
-		
+
 		// Add breadcrumb
 		breadcrumb := infoStyle.Render(fmt.Sprintf("🏠 Info Menu > %s", m.lastAction))
-		
+
 		var backInstructions string
 		if m.fromWelcome {
 			backInstructions = warningStyle.Render("← Press 'b'/'esc' to go back, 'w' for welcome") + "\n" +
@@ -2380,10 +2389,10 @@ func (m *InfoModel) View() string {
 			backInstructions = warningStyle.Render("← Press 'b', 'esc', or 'backspace' to go back") + "\n" +
 				infoStyle.Render("Press 'q' to quit")
 		}
-		
-		content := header + "\n\n" + 
+
+		content := header + "\n\n" +
 			breadcrumb + "\n\n" +
-			result + "\n\n" + 
+			result + "\n\n" +
 			backInstructions
 		return m.fitInfoToTerminal(content, width, height)
 	}
@@ -2473,7 +2482,11 @@ func (m *InfoModel) fetchInfo() tea.Cmd {
 			if err != nil {
 				result = errorStyle.Render(fmt.Sprintf("Error: %v", err))
 			} else {
-				defer conn.Close()
+				defer func() {
+					if err := conn.Close(); err != nil {
+						fmt.Printf("Error closing connection: %v\n", err)
+					}
+				}()
 				cert := conn.ConnectionState().PeerCertificates[0]
 				result = successStyle.Render("🔒 Certificate Info:") + "\n\n" +
 					fmt.Sprintf("  • Subject: %s\n", cert.Subject) +
@@ -2665,6 +2678,7 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 				continue
 			}
 
+<<<<<<< Updated upstream
 			// Configure authentication
 			configureAuthentication(req, authConfig)
 
@@ -2742,6 +2756,11 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 				ContentSize: int64(len(body)),
 			}
 			detailedResponses = append(detailedResponses, detailedResp)
+=======
+		fmt.Printf("Status: %d %s, Time: %v\n", statusCode, statusText, duration)
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+>>>>>>> Stashed changes
 		}
 
 		if count > 0 && i >= count-1 {
@@ -2911,7 +2930,11 @@ func showHTML(url, outputFilename string) {
 		fmt.Printf("Error fetching HTML: %v\n", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -2947,14 +2970,14 @@ func extractHostFromURL(url string) string {
 
 // WelcomeModel represents the welcome screen TUI
 type WelcomeModel struct {
-	selected      int
-	options       []WelcomeOption
-	width         int
-	height        int
-	quit          bool
-	showingInput  bool
-	inputMode     string // "ping" or "info"
-	textInput     textinput.Model
+	selected     int
+	options      []WelcomeOption
+	width        int
+	height       int
+	quit         bool
+	showingInput bool
+	inputMode    string // "ping" or "info"
+	textInput    textinput.Model
 }
 
 // WelcomeOption represents a menu option
@@ -2974,7 +2997,7 @@ func NewWelcomeModel() *WelcomeModel {
 	ti.Width = 50
 
 	return &WelcomeModel{
-		selected: 0,
+		selected:  0,
 		textInput: ti,
 		options: []WelcomeOption{
 			{
@@ -3087,7 +3110,7 @@ func (m *WelcomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *WelcomeModel) handleSelection() (tea.Model, tea.Cmd) {
 	selectedOption := m.options[m.selected]
-	
+
 	switch selectedOption.Action {
 	case "ping":
 		// Show input for domain
@@ -3121,7 +3144,7 @@ func (m *WelcomeModel) launchWithDomain(domain string) (tea.Model, tea.Cmd) {
 	// Clean up domain input
 	domain = strings.TrimSpace(domain)
 	domain = strings.TrimPrefix(strings.TrimPrefix(domain, "http://"), "https://")
-	
+
 	if m.inputMode == "ping" || m.inputMode == "" {
 		// Launch ping
 		pingModel := &PingModel{
@@ -3175,16 +3198,16 @@ func (m *WelcomeModel) View() string {
 		} else {
 			actionTitle = "🔍 Domain Info"
 		}
-		
+
 		inputTitle := successStyle.Render(actionTitle)
 		inputPrompt := infoStyle.Render("Enter the domain you want to " + strings.ToLower(strings.TrimPrefix(actionTitle, "🌐 ")) + ":")
-		
+
 		content := title + "\n" + description + "\n\n" +
 			inputTitle + "\n\n" +
 			inputPrompt + "\n\n" +
 			m.textInput.View() + "\n\n" +
 			warningStyle.Render("Press Enter to continue, Esc to go back")
-		
+
 		// Create responsive box
 		responsiveBoxStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -3192,7 +3215,7 @@ func (m *WelcomeModel) View() string {
 			BorderForeground(lipgloss.Color("#874BFD")).
 			Width(width - 4).
 			Height(height - 4)
-		
+
 		return responsiveBoxStyle.Render(content)
 	}
 
@@ -3294,11 +3317,11 @@ func showWelcomeText() {
 
 // HelpModel represents the help screen TUI
 type HelpModel struct {
-	width    int
-	height   int
-	quit     bool
-	scroll   int
-	content  []string
+	width   int
+	height  int
+	quit    bool
+	scroll  int
+	content []string
 }
 
 // NewHelpModel creates a new help model
@@ -3476,15 +3499,11 @@ func (m *HelpModel) View() string {
 
 	// Calculate visible content
 	visibleHeight := height - 8 // Reserve space for header, footer, borders
-	if visibleHeight < 3 {
-		visibleHeight = 3
-	}
+	visibleHeight = max(visibleHeight, 3)
 
 	startLine := m.scroll
 	endLine := startLine + visibleHeight
-	if endLine > len(m.content) {
-		endLine = len(m.content)
-	}
+	endLine = min(endLine, len(m.content))
 
 	// Build visible content
 	var contentLines []string
