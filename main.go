@@ -2181,8 +2181,14 @@ func collectPerformanceMetrics(targetURL string, client *http.Client) (*Performa
 
 // fetchGeoLocation fetches geographical information for an IP address
 func fetchGeoLocation(ipAddress string) (*GeoLocation, error) {
-	// Using ip-api.com free service (no API key required)
-	apiURL := fmt.Sprintf("http://ip-api.com/json/%s", ipAddress)
+	return fetchFromIPAPI(ipAddress)
+}
+
+// fetchFromIPAPI fetches from ipapi.co
+func fetchFromIPAPI(ipAddress string) (*GeoLocation, error) {
+	// Using ipapi.co free service (more accurate than ip-api.com)
+	// Free tier: 1000 requests/day, no API key required
+	apiURL := fmt.Sprintf("https://ipapi.co/%s/json/", ipAddress)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -2198,24 +2204,65 @@ func fetchGeoLocation(ipAddress string) (*GeoLocation, error) {
 		}
 	}()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("geolocation API returned status: %d", resp.StatusCode)
+	// If rate limited, return helpful error message
+	if resp.StatusCode == 429 {
+		return nil, fmt.Errorf("rate limited - please wait a moment and try again")
 	}
 
-	var geoData GeoLocation
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status: %d", resp.StatusCode)
+	}
+
+	// ipapi.co response structure
+	var ipapiResponse struct {
+		IP           string  `json:"ip"`
+		City         string  `json:"city"`
+		Region       string  `json:"region"`
+		RegionCode   string  `json:"region_code"`
+		Country      string  `json:"country_name"`
+		CountryCode  string  `json:"country_code"`
+		Postal       string  `json:"postal"`
+		Latitude     float64 `json:"latitude"`
+		Longitude    float64 `json:"longitude"`
+		Timezone     string  `json:"timezone"`
+		ASN          string  `json:"asn"`
+		Org          string  `json:"org"`
+		Error        bool    `json:"error,omitempty"`
+		Reason       string  `json:"reason,omitempty"`
+	}
+
 	decoder := json.NewDecoder(resp.Body)
-	err = decoder.Decode(&geoData)
+	err = decoder.Decode(&ipapiResponse)
 	if err != nil {
 		return nil, err
 	}
 
-	// ip-api.com uses "success" field instead of a Success boolean
-	// We need to map their response format to our struct
-	if geoData.Country != "" {
-		geoData.Success = true
+	// Check for API error
+	if ipapiResponse.Error {
+		return &GeoLocation{
+			Success: false,
+			Message: ipapiResponse.Reason,
+		}, nil
 	}
 
-	return &geoData, nil
+	// Map to our GeoLocation struct
+	geoData := &GeoLocation{
+		IP:          ipapiResponse.IP,
+		Country:     ipapiResponse.Country,
+		CountryCode: ipapiResponse.CountryCode,
+		Region:      ipapiResponse.RegionCode,
+		RegionName:  ipapiResponse.Region,
+		City:        ipapiResponse.City,
+		Zip:         ipapiResponse.Postal,
+		Lat:         ipapiResponse.Latitude,
+		Lon:         ipapiResponse.Longitude,
+		Timezone:    ipapiResponse.Timezone,
+		Org:         ipapiResponse.Org,
+		AS:          ipapiResponse.ASN,
+		Success:     true,
+	}
+
+	return geoData, nil
 }
 
 // enhancedHTTPRequest performs HTTP request with resource analysis and performance metrics
@@ -2604,7 +2651,8 @@ func (m *InfoModel) fetchInfo() tea.Cmd {
 				} else if !geoData.Success {
 					result = errorStyle.Render(fmt.Sprintf("Geolocation failed: %s", geoData.Message))
 				} else {
-					result = successStyle.Render(fmt.Sprintf("🌍 Geolocation for %s:", ip)) + "\n\n" +
+					result = successStyle.Render(fmt.Sprintf("🌍 Geolocation for %s:", ip)) + "\n" +
+						infoStyle.Render("Data source: ipapi.co") + "\n\n" +
 						fmt.Sprintf("  • Country: %s (%s)\n", geoData.Country, geoData.CountryCode) +
 						fmt.Sprintf("  • Region: %s (%s)\n", geoData.RegionName, geoData.Region) +
 						fmt.Sprintf("  • City: %s\n", geoData.City) +
@@ -3656,34 +3704,58 @@ func showGeolocationInfo(targetURL string) {
 		return
 	}
 
-	ip := ips[0].String()
-	geoData, err := fetchGeoLocation(ip)
-	if err != nil {
-		fmt.Printf("\n🌍 Error fetching geolocation: %v\n", err)
-		return
-	}
-	if !geoData.Success {
-		fmt.Printf("\n🌍 Geolocation failed: %s\n", geoData.Message)
-		return
-	}
+	fmt.Printf("\n🌍 Geolocation for %s (found %d IP(s)):\n", domain, len(ips))
+	fmt.Printf("  Data source: ipapi.co\n")
+	fmt.Printf("  ⚠️  WARNING: Location depends on DNS resolver and CDN routing\n")
+	fmt.Printf("  Note: If using a CDN, location may not match your geographic region\n")
+	fmt.Printf("  Tip: Check ISP/Org field - if it shows a CDN (Fastly, Cloudflare, etc.),\n")
+	fmt.Printf("       the location might be incorrect due to DNS or CDN misconfiguration\n\n")
 
-	fmt.Printf("\n🌍 Geolocation for %s (%s):\n", domain, ip)
-	fmt.Printf("  Country: %s (%s)\n", geoData.Country, geoData.CountryCode)
-	fmt.Printf("  Region: %s (%s)\n", geoData.RegionName, geoData.Region)
-	fmt.Printf("  City: %s\n", geoData.City)
-	fmt.Printf("  Coordinates: %.4f, %.4f\n", geoData.Lat, geoData.Lon)
-	fmt.Printf("  Timezone: %s\n", geoData.Timezone)
-	fmt.Printf("  ISP: %s\n", geoData.ISP)
-	fmt.Printf("  Organization: %s\n", geoData.Org)
+	// Show geolocation for all resolved IPs
+	for i, ip := range ips {
+		// Add delay between requests to avoid rate limiting (except for first request)
+		if i > 0 {
+			time.Sleep(1 * time.Second)
+		}
 
-	if geoData.Zip != "" {
-		fmt.Printf("  ZIP: %s\n", geoData.Zip)
+		ipStr := ip.String()
+		geoData, err := fetchGeoLocation(ipStr)
+		if err != nil {
+			fmt.Printf("[IP %d] %s: Error fetching geolocation: %v\n", i+1, ipStr, err)
+			continue
+		}
+		if !geoData.Success {
+			fmt.Printf("[IP %d] %s: Geolocation failed: %s\n", i+1, ipStr, geoData.Message)
+			continue
+		}
+
+		fmt.Printf("[IP %d] %s:\n", i+1, ipStr)
+		if geoData.Org != "" {
+			fmt.Printf("  ⚠️  ISP/Organization: %s\n", geoData.Org)
+			if strings.Contains(strings.ToLower(geoData.Org), "fastly") ||
+			   strings.Contains(strings.ToLower(geoData.Org), "cloudflare") ||
+			   strings.Contains(strings.ToLower(geoData.Org), "akamai") ||
+			   strings.Contains(strings.ToLower(geoData.Org), "cdn") {
+				fmt.Printf("  ⚠️  This is a CDN - actual server location may differ from your region\n")
+			}
+		}
+		fmt.Printf("  Server Location: %s (%s)\n", geoData.Country, geoData.CountryCode)
+		fmt.Printf("  Region: %s (%s)\n", geoData.RegionName, geoData.Region)
+		fmt.Printf("  City: %s\n", geoData.City)
+		fmt.Printf("  Coordinates: %.4f, %.4f\n", geoData.Lat, geoData.Lon)
+		fmt.Printf("  Timezone: %s\n", geoData.Timezone)
+		fmt.Printf("  ISP: %s\n", geoData.ISP)
+		fmt.Printf("  Organization: %s\n", geoData.Org)
+
+		if geoData.Zip != "" {
+			fmt.Printf("  ZIP: %s\n", geoData.Zip)
+		}
+		if geoData.AS != "" {
+			fmt.Printf("  AS: %s\n", geoData.AS)
+		}
+		if geoData.ASName != "" {
+			fmt.Printf("  AS Name: %s\n", geoData.ASName)
+		}
+		fmt.Println()
 	}
-	if geoData.AS != "" {
-		fmt.Printf("  AS: %s\n", geoData.AS)
-	}
-	if geoData.ASName != "" {
-		fmt.Printf("  AS Name: %s\n", geoData.ASName)
-	}
-	fmt.Println()
 }
