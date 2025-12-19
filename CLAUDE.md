@@ -86,7 +86,7 @@ go mod tidy
 
 ## Configuration
 
-The application uses Go 1.24.4 and requires these external dependencies:
+The application uses Go 1.25.5 and requires these external dependencies:
 - `github.com/charmbracelet/bubbletea` - TUI framework
 - `github.com/charmbracelet/lipgloss` - Terminal styling
 - `github.com/likexian/whois` - WHOIS lookups
