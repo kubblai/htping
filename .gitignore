@@ -122,3 +122,8 @@ terraform.rc
 *terraform.tfstate
 *terraform.tfstate.backup
 .terraform.lock.hcl
+
+# Node/npm
+node_modules/
+package.json
+package-lock.json
