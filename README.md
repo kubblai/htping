@@ -1,6 +1,6 @@
 # htping
 
-[![Go](https://img.shields.io/badge/Go-1.25.1+-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org/)
+[![Go](https://img.shields.io/badge/Go-1.26.0+-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org/)
 [![Terminal](https://img.shields.io/badge/Terminal-TUI-brightgreen?style=flat&logo=gnometerminal&logoColor=white)](https://github.com/charmbracelet/bubbletea)
 [![License](https://img.shields.io/badge/License-GPL%203.0-blue?style=flat&logo=gnu&logoColor=white)](LICENSE.md)
 
@@ -226,7 +226,7 @@ htping secure-api.com -u admin -p secret --export-html secure-analysis.html
 ## 🛠️ Development
 
 ### Prerequisites
-- **Go 1.25.1+** - Latest Go installation
+- **Go 1.26.0+** - Latest Go installation
 - **Color Terminal** - For optimal visual experience
 - **Internet Connection** - Required for web requests
 
