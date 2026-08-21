@@ -25,6 +25,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	defaultPingInterval = 2 * time.Second
+	defaultUserAgent    = "Mozilla/5.0 (compatible; htping/1.0; +https://github.com/kubblai/htping)"
+)
+
 // Styles for TUI
 var (
 	headerStyle = lipgloss.NewStyle().
@@ -140,8 +145,10 @@ type BasicAuthConfig struct {
 	Password string
 }
 
-// configureAuthentication sets up authentication headers for HTTP client
-func configureAuthentication(req *http.Request, authConfig AuthConfig) {
+// configureRequest sets the standard request and authentication headers.
+func configureRequest(req *http.Request, authConfig AuthConfig) {
+	req.Header.Set("User-Agent", defaultUserAgent)
+
 	if authConfig.UseBasic && authConfig.BasicAuth.Username != "" {
 		auth := authConfig.BasicAuth.Username + ":" + authConfig.BasicAuth.Password
 		encoded := base64.StdEncoding.EncodeToString([]byte(auth))
@@ -814,7 +821,7 @@ func (m *PingModel) performPing() tea.Cmd {
 		}
 
 		// Configure authentication
-		configureAuthentication(req, m.authConfig)
+		configureRequest(req, m.authConfig)
 
 		// Perform request
 		resp, err := m.client.Do(req)
@@ -1639,7 +1646,7 @@ func main() {
 		// Set default interval if not specified
 		interval := time.Duration(pingInterval) * time.Second
 		if interval <= 0 {
-			interval = time.Second // Default to 1 second
+			interval = defaultPingInterval
 		}
 
 		// Create TUI model
@@ -1662,7 +1669,7 @@ func main() {
 
 		// Start the TUI or fallback to simple mode
 		if isTerminal() {
-			p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+			p := tea.NewProgram(model, tea.WithAltScreen())
 			if _, err := p.Run(); err != nil {
 				fmt.Printf("Error running TUI: %v\n", err)
 				return
@@ -1703,7 +1710,7 @@ func main() {
 			if len(args) == 0 {
 				if isTerminal() {
 					welcomeModel := NewWelcomeModel()
-					p := tea.NewProgram(welcomeModel, tea.WithAltScreen(), tea.WithMouseCellMotion())
+					p := tea.NewProgram(welcomeModel, tea.WithAltScreen())
 					if _, err := p.Run(); err != nil {
 						fmt.Printf("Error running welcome TUI: %v\n", err)
 					}
@@ -1728,7 +1735,7 @@ func main() {
 			url := args[0]
 			if isTerminal() {
 				model := NewInfoModel(url)
-				p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+				p := tea.NewProgram(model, tea.WithAltScreen())
 				if _, err := p.Run(); err != nil {
 					fmt.Printf("Error running TUI: %v\n", err)
 				}
@@ -1838,7 +1845,7 @@ func main() {
 	pingCmd.Flags().StringVarP(&basicPassword, "password", "p", "", "Basic authentication password")
 	pingCmd.Flags().StringVar(&cookieAuth, "cookie", "", "Cookie authentication string (e.g., 'session=abc123')")
 	pingCmd.Flags().BoolVar(&useCache, "cache", false, "Enable response caching (5 minute TTL)")
-	pingCmd.Flags().IntVarP(&pingInterval, "interval", "i", 1, "Ping interval in seconds")
+	pingCmd.Flags().IntVarP(&pingInterval, "interval", "i", int(defaultPingInterval/time.Second), "Ping interval in seconds")
 	pingCmd.Flags().StringVar(&exportJSON, "export-json", "", "Export results to JSON file")
 	pingCmd.Flags().StringVar(&exportHTML, "export-html", "", "Export results to HTML report")
 
@@ -1854,7 +1861,7 @@ func main() {
 	rootCmd.Flags().StringVarP(&basicPassword, "password", "p", "", "Basic authentication password")
 	rootCmd.Flags().StringVar(&cookieAuth, "cookie", "", "Cookie authentication string (e.g., 'session=abc123')")
 	rootCmd.Flags().BoolVar(&useCache, "cache", false, "Enable response caching (5 minute TTL)")
-	rootCmd.Flags().IntVarP(&pingInterval, "interval", "i", 1, "Ping interval in seconds")
+	rootCmd.Flags().IntVarP(&pingInterval, "interval", "i", int(defaultPingInterval/time.Second), "Ping interval in seconds")
 	rootCmd.Flags().StringVar(&exportJSON, "export-json", "", "Export results to JSON file")
 	rootCmd.Flags().StringVar(&exportHTML, "export-html", "", "Export results to HTML report")
 
@@ -2215,20 +2222,20 @@ func fetchFromIPAPI(ipAddress string) (*GeoLocation, error) {
 
 	// ipapi.co response structure
 	var ipapiResponse struct {
-		IP           string  `json:"ip"`
-		City         string  `json:"city"`
-		Region       string  `json:"region"`
-		RegionCode   string  `json:"region_code"`
-		Country      string  `json:"country_name"`
-		CountryCode  string  `json:"country_code"`
-		Postal       string  `json:"postal"`
-		Latitude     float64 `json:"latitude"`
-		Longitude    float64 `json:"longitude"`
-		Timezone     string  `json:"timezone"`
-		ASN          string  `json:"asn"`
-		Org          string  `json:"org"`
-		Error        bool    `json:"error,omitempty"`
-		Reason       string  `json:"reason,omitempty"`
+		IP          string  `json:"ip"`
+		City        string  `json:"city"`
+		Region      string  `json:"region"`
+		RegionCode  string  `json:"region_code"`
+		Country     string  `json:"country_name"`
+		CountryCode string  `json:"country_code"`
+		Postal      string  `json:"postal"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Timezone    string  `json:"timezone"`
+		ASN         string  `json:"asn"`
+		Org         string  `json:"org"`
+		Error       bool    `json:"error,omitempty"`
+		Reason      string  `json:"reason,omitempty"`
 	}
 
 	decoder := json.NewDecoder(resp.Body)
@@ -2378,24 +2385,31 @@ func (m *InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.showResult && !m.loading {
 				// Check if "Start HTTP Ping" is selected
 				if m.options[m.selected] == "Start HTTP Ping" {
+					targetURL := m.url
+					if !hasProtocol(targetURL) {
+						targetURL = "https://" + targetURL
+					}
+
 					// Switch to ping mode
 					pingModel := &PingModel{
-						url:       "https://" + m.url,
+						url:       targetURL,
 						running:   true,
 						count:     0, // Continuous
+						useHTTP:   strings.HasPrefix(targetURL, "http://"),
 						client:    &http.Client{Timeout: 10 * time.Second},
 						width:     m.width,
 						height:    m.height,
 						startTime: time.Now(),
+						interval:  defaultPingInterval,
 					}
 					// Resolve IP for ping model
-					ips, err := net.LookupIP(m.url)
+					ips, err := net.LookupIP(extractHostFromURL(targetURL))
 					if err == nil && len(ips) > 0 {
 						pingModel.ip = ips[0].String()
 					} else {
 						pingModel.ip = "unknown"
 					}
-					return pingModel, tea.Tick(time.Second, func(t time.Time) tea.Msg {
+					return pingModel, tea.Tick(pingModel.interval, func(t time.Time) tea.Msg {
 						return PingTickMsg{}
 					})
 				} else if m.options[m.selected] != "---" {
@@ -2755,7 +2769,7 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 			}
 
 			// Configure authentication
-			configureAuthentication(req, authConfig)
+			configureRequest(req, authConfig)
 
 			// Perform request
 			resp, err = client.Do(req)
@@ -3221,33 +3235,39 @@ func (m *WelcomeModel) handleSelection() (tea.Model, tea.Cmd) {
 }
 
 func (m *WelcomeModel) launchWithDomain(domain string) (tea.Model, tea.Cmd) {
-	// Clean up domain input
 	domain = strings.TrimSpace(domain)
-	domain = strings.TrimPrefix(strings.TrimPrefix(domain, "http://"), "https://")
 
 	if m.inputMode == "ping" || m.inputMode == "" {
+		targetURL := domain
+		if !hasProtocol(targetURL) {
+			targetURL = "https://" + targetURL
+		}
+
 		// Launch ping
 		pingModel := &PingModel{
-			url:       "https://" + domain,
+			url:       targetURL,
 			running:   true,
 			count:     0, // Continuous
+			useHTTP:   strings.HasPrefix(targetURL, "http://"),
 			client:    &http.Client{Timeout: 10 * time.Second},
 			width:     m.width,
 			height:    m.height,
 			startTime: time.Now(),
+			interval:  defaultPingInterval,
 		}
 		// Resolve IP
-		ips, err := net.LookupIP(domain)
+		ips, err := net.LookupIP(extractHostFromURL(targetURL))
 		if err == nil && len(ips) > 0 {
 			pingModel.ip = ips[0].String()
 		} else {
 			pingModel.ip = "unknown"
 		}
-		return pingModel, tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return pingModel, tea.Tick(pingModel.interval, func(t time.Time) tea.Msg {
 			return PingTickMsg{}
 		})
 	} else {
 		// Launch info menu
+		domain = strings.TrimPrefix(strings.TrimPrefix(domain, "http://"), "https://")
 		infoModel := NewInfoModelWithSize(domain, m.width, m.height)
 		infoModel.fromWelcome = true
 		return infoModel, nil
@@ -3377,7 +3397,7 @@ func showWelcomeText() {
 	fmt.Println()
 	fmt.Println("Options:")
 	fmt.Println("  -c, --count int       Number of pings (0 for continuous)")
-	fmt.Println("  -i, --interval int    Ping interval in seconds (default: 1)")
+	fmt.Println("  -i, --interval int    Ping interval in seconds (default: 2)")
 	fmt.Println("      --http            Use HTTP instead of HTTPS")
 	fmt.Println("      --html            Show HTML content after pings")
 	fmt.Println("  -o, --output string   Output filename for HTML content")
@@ -3445,7 +3465,7 @@ func NewHelpModel() *HelpModel {
 		"",
 		"OPTIONS:",
 		"  -c, --count int       Number of pings (0 for continuous)",
-		"  -i, --interval int    Ping interval in seconds (default: 1)",
+		"  -i, --interval int    Ping interval in seconds (default: 2)",
 		"      --http            Use HTTP instead of HTTPS",
 		"      --html            Show HTML content after pings",
 		"  -o, --output string   Output filename for HTML content",
@@ -3733,9 +3753,9 @@ func showGeolocationInfo(targetURL string) {
 		if geoData.Org != "" {
 			fmt.Printf("  ⚠️  ISP/Organization: %s\n", geoData.Org)
 			if strings.Contains(strings.ToLower(geoData.Org), "fastly") ||
-			   strings.Contains(strings.ToLower(geoData.Org), "cloudflare") ||
-			   strings.Contains(strings.ToLower(geoData.Org), "akamai") ||
-			   strings.Contains(strings.ToLower(geoData.Org), "cdn") {
+				strings.Contains(strings.ToLower(geoData.Org), "cloudflare") ||
+				strings.Contains(strings.ToLower(geoData.Org), "akamai") ||
+				strings.Contains(strings.ToLower(geoData.Org), "cdn") {
 				fmt.Printf("  ⚠️  This is a CDN - actual server location may differ from your region\n")
 			}
 		}

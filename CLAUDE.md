@@ -86,7 +86,7 @@ go mod tidy
 
 ## Configuration
 
-The application uses Go 1.26.0 and requires these external dependencies:
+The application uses Go 1.26.6 and requires these external dependencies:
 - `github.com/charmbracelet/bubbletea` - TUI framework
 - `github.com/charmbracelet/lipgloss` - Terminal styling
 - `github.com/likexian/whois` - WHOIS lookups
@@ -124,5 +124,5 @@ The application uses Go 1.26.0 and requires these external dependencies:
 - **Enhanced controls**:
   - **Ping mode**: 'p' = pause/resume, 'i' = info menu, 'q' = quit
   - **Info mode**: ↑↓/j/k = navigate, Enter = select, Esc/b/backspace = back, 'q' = quit
-- **Enhanced mouse support**: Enabled for better terminal interaction
+- **Terminal text selection**: Mouse tracking stays disabled so users can select and copy TUI text
 - **Graceful fallback**: Works in non-interactive environments with simple text output

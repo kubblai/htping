@@ -1,6 +1,6 @@
 # htping
 
-[![Go](https://img.shields.io/badge/Go-1.26.0+-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org/)
+[![Go](https://img.shields.io/badge/Go-1.26.6+-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org/)
 [![Terminal](https://img.shields.io/badge/Terminal-TUI-brightgreen?style=flat&logo=gnometerminal&logoColor=white)](https://github.com/charmbracelet/bubbletea)
 [![License](https://img.shields.io/badge/License-GPL%203.0-blue?style=flat&logo=gnu&logoColor=white)](LICENSE.md)
 
@@ -141,6 +141,8 @@ htping api.example.com -c 10 -i 2 --export-json api-data.json --export-html api-
 
 ## ⌨️ Navigation & Controls
 
+Mouse tracking is disabled so you can drag to select text and use your terminal's normal copy shortcut while the TUI is running.
+
 ### 🏓 Ping Mode
 | Key | Action |
 |-----|--------|
@@ -171,7 +173,7 @@ htping api.example.com -c 10 -i 2 --export-json api-data.json --export-html api-
 ```bash
 -h, --help              Show help information
 -c, --count int         Number of requests (default: 0 = continuous)
--i, --interval int      Ping interval in seconds (default: 1)
+-i, --interval int      Ping interval in seconds (default: 2)
     --http              Force HTTP instead of HTTPS  
     --html              Display HTML content after requests
 -o, --output string     Save HTML content to file (requires --html)
@@ -226,7 +228,7 @@ htping secure-api.com -u admin -p secret --export-html secure-analysis.html
 ## 🛠️ Development
 
 ### Prerequisites
-- **Go 1.26.0+** - Latest Go installation
+- **Go 1.26.6+** - Latest Go installation
 - **Color Terminal** - For optimal visual experience
 - **Internet Connection** - Required for web requests
 

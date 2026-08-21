@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Test URL parsing functions
@@ -24,7 +26,7 @@ func TestHasProtocol(t *testing.T) {
 		{"No protocol", "example.com", false},
 		{"Empty string", "", false},
 		{"Short string", "abc", false},
-		{"HTTP uppercase", "HTTP://example.com", false}, // Case sensitive
+		{"HTTP uppercase", "HTTP://example.com", false},   // Case sensitive
 		{"HTTPS uppercase", "HTTPS://example.com", false}, // Case sensitive
 		{"FTP protocol", "ftp://example.com", false},
 		{"Protocol-like but not", "httpx://example.com", false},
@@ -187,6 +189,61 @@ func TestNewWelcomeModelWithSize(t *testing.T) {
 
 	if model.height != height {
 		t.Errorf("Expected height %d, got %d", height, model.height)
+	}
+}
+
+func TestWelcomeModelLaunchPingPreservesHTTP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.UserAgent(), "Mozilla/5.0") {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	targetURL := server.URL + "/health"
+	model := NewWelcomeModel()
+	model.inputMode = "ping"
+
+	launched, _ := model.launchWithDomain(targetURL)
+	pingModel, ok := launched.(*PingModel)
+	if !ok {
+		t.Fatalf("Expected *PingModel, got %T", launched)
+	}
+	if pingModel.url != targetURL {
+		t.Errorf("Expected HTTP URL to be preserved, got %q", pingModel.url)
+	}
+	if pingModel.interval != 2*time.Second {
+		t.Errorf("Expected two-second ping interval, got %v", pingModel.interval)
+	}
+
+	result, ok := pingModel.performPing()().(PingResultMsg)
+	if !ok {
+		t.Fatalf("Expected PingResultMsg, got %T", result)
+	}
+	if result.Response.Error != nil {
+		t.Fatalf("Expected HTTP ping to succeed, got %v", result.Response.Error)
+	}
+	if result.Response.StatusCode != http.StatusNoContent {
+		t.Errorf("Expected status %d, got %d", http.StatusNoContent, result.Response.StatusCode)
+	}
+}
+
+func TestInfoModelLaunchPingPreservesHTTP(t *testing.T) {
+	model := NewInfoModel("http://127.0.0.1:8080/health")
+	model.selected = len(model.options) - 1
+
+	launched, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	pingModel, ok := launched.(*PingModel)
+	if !ok {
+		t.Fatalf("Expected *PingModel, got %T", launched)
+	}
+	if pingModel.url != "http://127.0.0.1:8080/health" {
+		t.Errorf("Expected HTTP URL to be preserved, got %q", pingModel.url)
+	}
+	if pingModel.interval != 2*time.Second {
+		t.Errorf("Expected two-second ping interval, got %v", pingModel.interval)
 	}
 }
 
@@ -380,10 +437,10 @@ func TestPingModelCreation(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	tests := []struct {
-		name     string
-		url      string
-		count    int
-		useHTTP  bool
+		name    string
+		url     string
+		count   int
+		useHTTP bool
 	}{
 		{"HTTPS ping", "https://example.com", 3, false},
 		{"HTTP ping", "http://example.com", 5, true},
@@ -423,11 +480,11 @@ func TestPingModelCreation(t *testing.T) {
 
 func TestPingResponseHandling(t *testing.T) {
 	tests := []struct {
-		name           string
-		statusCode     int
-		duration       time.Duration
-		expectError    bool
-		errorMessage   string
+		name         string
+		statusCode   int
+		duration     time.Duration
+		expectError  bool
+		errorMessage string
 	}{
 		{"Success response", 200, 100 * time.Millisecond, false, ""},
 		{"Redirect response", 301, 150 * time.Millisecond, false, ""},
@@ -440,8 +497,8 @@ func TestPingResponseHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var err error
 			if tt.expectError {
-						// Create a custom error for testing
-						err = errors.New(tt.errorMessage)
+				// Create a custom error for testing
+				err = errors.New(tt.errorMessage)
 			}
 
 			response := PingResponse{
@@ -485,7 +542,7 @@ func TestHTTPClientConfiguration(t *testing.T) {
 	t.Run("Client with custom transport", func(t *testing.T) {
 		transport := &http.Transport{}
 		client := &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
 			Transport: transport,
 		}
 
@@ -770,11 +827,11 @@ func TestCollectResourceStats(t *testing.T) {
 	if len(stats.ExternalHosts) != 2 {
 		t.Errorf("Expected 2 external hosts, got %d", len(stats.ExternalHosts))
 	}
-	
+
 	if stats.ExternalHosts["external.com"] != 3 {
 		t.Errorf("Expected 3 resources from external.com, got %d", stats.ExternalHosts["external.com"])
 	}
-	
+
 	if stats.ExternalHosts["example.com"] != 1 {
 		t.Errorf("Expected 1 resource from example.com, got %d", stats.ExternalHosts["example.com"])
 	}
@@ -845,7 +902,7 @@ func TestCollectPerformanceMetrics(t *testing.T) {
 func TestFetchGeoLocation(t *testing.T) {
 	// Test with a known public IP (Google DNS)
 	geoData, err := fetchGeoLocation("8.8.8.8")
-	
+
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -987,23 +1044,23 @@ func TestAuthenticationConfig(t *testing.T) {
 			Password: "testpass",
 		},
 	}
-	
-	configureAuthentication(req, authConfig)
-	
+
+	configureRequest(req, authConfig)
+
 	authHeader := req.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Basic ") {
 		t.Errorf("Expected basic auth header, got: %s", authHeader)
 	}
-	
+
 	// Test cookie auth
 	req2, _ := http.NewRequest("GET", "http://example.com", nil)
 	authConfig2 := AuthConfig{
-		UseCookie: true,
+		UseCookie:  true,
 		CookieAuth: "session=abc123",
 	}
-	
-	configureAuthentication(req2, authConfig2)
-	
+
+	configureRequest(req2, authConfig2)
+
 	cookieHeader := req2.Header.Get("Cookie")
 	if cookieHeader != "session=abc123" {
 		t.Errorf("Expected cookie header 'session=abc123', got: %s", cookieHeader)
@@ -1013,7 +1070,7 @@ func TestAuthenticationConfig(t *testing.T) {
 // Test response caching functionality
 func TestResponseCaching(t *testing.T) {
 	cache := NewResponseCache(time.Minute)
-	
+
 	// Test setting and getting cache entry
 	entry := &CacheEntry{
 		StatusCode: 200,
@@ -1021,19 +1078,19 @@ func TestResponseCaching(t *testing.T) {
 		Timestamp:  time.Now(),
 		Headers:    http.Header{"Content-Type": []string{"text/html"}},
 	}
-	
+
 	key := "test-key"
 	cache.Set(key, entry)
-	
+
 	retrieved, found := cache.Get(key)
 	if !found {
 		t.Error("Expected to find cached entry")
 	}
-	
+
 	if retrieved.StatusCode != 200 {
 		t.Errorf("Expected status code 200, got %d", retrieved.StatusCode)
 	}
-	
+
 	if string(retrieved.Body) != "test body" {
 		t.Errorf("Expected body 'test body', got %s", string(retrieved.Body))
 	}
@@ -1042,25 +1099,25 @@ func TestResponseCaching(t *testing.T) {
 // Test cache expiration
 func TestCacheExpiration(t *testing.T) {
 	cache := NewResponseCache(10 * time.Millisecond) // Very short TTL
-	
+
 	entry := &CacheEntry{
 		StatusCode: 200,
 		Body:       []byte("test"),
 		Timestamp:  time.Now(),
 		Headers:    make(http.Header),
 	}
-	
+
 	cache.Set("test-key", entry)
-	
+
 	// Should exist immediately
 	_, found := cache.Get("test-key")
 	if !found {
 		t.Error("Expected to find fresh cache entry")
 	}
-	
+
 	// Wait for expiration
 	time.Sleep(20 * time.Millisecond)
-	
+
 	// Should be expired now
 	_, found = cache.Get("test-key")
 	if found {
@@ -1092,32 +1149,32 @@ func TestJSONExport(t *testing.T) {
 		},
 		Generated: time.Now(),
 	}
-	
+
 	// Test JSON export
 	filename := "test-export.json"
 	defer os.Remove(filename) // Clean up after test
-	
+
 	err := exportJSONReport(reportData, filename)
 	if err != nil {
 		t.Fatalf("JSON export failed: %v", err)
 	}
-	
+
 	// Verify file exists and contains valid JSON
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Fatalf("Failed to read exported JSON: %v", err)
 	}
-	
+
 	var importedReport ReportData
 	err = json.Unmarshal(data, &importedReport)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
-	
+
 	if importedReport.Metadata.Tool != "htping" {
 		t.Errorf("Expected tool 'htping', got %s", importedReport.Metadata.Tool)
 	}
-	
+
 	if importedReport.PingResults.Summary.TotalPings != 2 {
 		t.Errorf("Expected 2 total pings, got %d", importedReport.PingResults.Summary.TotalPings)
 	}
@@ -1158,31 +1215,31 @@ func TestHTMLExport(t *testing.T) {
 		},
 		Generated: time.Now(),
 	}
-	
+
 	// Test HTML export
 	filename := "test-export.html"
 	defer os.Remove(filename) // Clean up after test
-	
+
 	err := exportHTMLReport(reportData, filename)
 	if err != nil {
 		t.Fatalf("HTML export failed: %v", err)
 	}
-	
+
 	// Verify file exists and contains expected content
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Fatalf("Failed to read exported HTML: %v", err)
 	}
-	
+
 	html := string(data)
 	if !strings.Contains(html, "htping Report") {
 		t.Error("HTML should contain 'htping Report'")
 	}
-	
+
 	if !strings.Contains(html, "example.com") {
 		t.Error("HTML should contain target URL 'example.com'")
 	}
-	
+
 	if !strings.Contains(html, "200") {
 		t.Error("HTML should contain status code '200'")
 	}
@@ -1192,22 +1249,22 @@ func TestHTMLExport(t *testing.T) {
 func TestCollectAllInfoData(t *testing.T) {
 	// Use a real domain for basic testing
 	infoData := collectAllInfoData("https://google.com")
-	
+
 	// Test DNS information
 	if len(infoData.DNS.Nameservers) == 0 && infoData.DNS.Error == "" {
 		t.Error("Expected DNS nameservers or error")
 	}
-	
+
 	// Test IP information
 	if len(infoData.IP.Addresses) == 0 && infoData.IP.Error == "" {
 		t.Error("Expected IP addresses or error")
 	}
-	
+
 	// Test certificate information (for HTTPS)
 	if infoData.Certificate.Subject == "" && infoData.Certificate.Error == "" {
 		t.Error("Expected certificate info or error for HTTPS domain")
 	}
-	
+
 	// Test WHOIS information
 	if infoData.WHOIS.RawData == "" && infoData.WHOIS.Error == "" {
 		t.Error("Expected WHOIS data or error")
@@ -1220,20 +1277,20 @@ func TestCacheKeyGeneration(t *testing.T) {
 	url2 := "http://example.org"
 	auth1 := "user1:pass1"
 	auth2 := "user2:pass2"
-	
+
 	// Same URL and auth should generate same key
 	key1a := generateCacheKey(url1, auth1)
 	key1b := generateCacheKey(url1, auth1)
 	if key1a != key1b {
 		t.Error("Same URL and auth should generate same cache key")
 	}
-	
+
 	// Different URL should generate different key
 	key2 := generateCacheKey(url2, auth1)
 	if key1a == key2 {
 		t.Error("Different URLs should generate different cache keys")
 	}
-	
+
 	// Different auth should generate different key
 	key3 := generateCacheKey(url1, auth2)
 	if key1a == key3 {
@@ -1244,7 +1301,7 @@ func TestCacheKeyGeneration(t *testing.T) {
 // Test report data structures
 func TestReportDataStructure(t *testing.T) {
 	now := time.Now()
-	
+
 	reportData := ReportData{
 		Metadata: ReportMetadata{
 			Tool:       "htping",
@@ -1266,19 +1323,19 @@ func TestReportDataStructure(t *testing.T) {
 		},
 		Generated: now,
 	}
-	
+
 	if reportData.Metadata.Tool != "htping" {
 		t.Errorf("Expected tool 'htping', got %s", reportData.Metadata.Tool)
 	}
-	
+
 	if reportData.Target.Protocol != "https" {
 		t.Errorf("Expected protocol 'https', got %s", reportData.Target.Protocol)
 	}
-	
+
 	if reportData.Target.Options.Count != 5 {
 		t.Errorf("Expected count 5, got %d", reportData.Target.Options.Count)
 	}
-	
+
 	if !reportData.Target.Options.UseCache {
 		t.Error("Expected UseCache to be true")
 	}
@@ -1293,9 +1350,9 @@ func BenchmarkCacheOperations(b *testing.B) {
 		Timestamp:  time.Now(),
 		Headers:    make(http.Header),
 	}
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		key := generateCacheKey("http://example.com", "test")
 		cache.Set(key, entry)
@@ -1310,13 +1367,13 @@ func TestPingIntervals(t *testing.T) {
 		2 * time.Second,
 		5 * time.Second,
 	}
-	
+
 	for _, interval := range intervals {
 		// Test that intervals are handled properly
 		if interval <= 0 {
 			t.Errorf("Interval should be positive, got %v", interval)
 		}
-		
+
 		// Test interval string conversion
 		intervalStr := interval.String()
 		if intervalStr == "" {
@@ -1324,4 +1381,3 @@ func TestPingIntervals(t *testing.T) {
 		}
 	}
 }
-
