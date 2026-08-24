@@ -904,6 +904,11 @@ func TestFetchGeoLocation(t *testing.T) {
 	geoData, err := fetchGeoLocation("8.8.8.8")
 
 	if err != nil {
+		// ipapi.co free tier throttles with no documented reset window;
+		// skip rather than fail (or hammer the API retrying).
+		if errors.Is(err, errRateLimited) {
+			t.Skipf("ipapi.co rate limited; skipping live geolocation check")
+		}
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
@@ -1242,6 +1247,76 @@ func TestHTMLExport(t *testing.T) {
 
 	if !strings.Contains(html, "200") {
 		t.Error("HTML should contain status code '200'")
+	}
+}
+
+// Test info result export (JSON and HTML) used by the TUI
+func TestWriteInfoResult(t *testing.T) {
+	export := infoResultExport{
+		URL:       "example.com",
+		InfoType:  "DNS Servers",
+		Generated: time.Now(),
+		Result:    "Nameserver: a.iana-servers.net\n<script>alert(1)</script>",
+	}
+
+	t.Run("JSON", func(t *testing.T) {
+		filename := "test-info-export.json"
+		defer os.Remove(filename)
+
+		if err := writeInfoResultJSON(filename, export); err != nil {
+			t.Fatalf("JSON export failed: %v", err)
+		}
+
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			t.Fatalf("Failed to read exported JSON: %v", err)
+		}
+
+		jsonStr := string(data)
+		for _, want := range []string{"example.com", "DNS Servers", "a.iana-servers.net"} {
+			if !strings.Contains(jsonStr, want) {
+				t.Errorf("JSON should contain %q", want)
+			}
+		}
+	})
+
+	t.Run("HTML", func(t *testing.T) {
+		filename := "test-info-export.html"
+		defer os.Remove(filename)
+
+		if err := writeInfoResultHTML(filename, export); err != nil {
+			t.Fatalf("HTML export failed: %v", err)
+		}
+
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			t.Fatalf("Failed to read exported HTML: %v", err)
+		}
+
+		html := string(data)
+		if !strings.Contains(html, "example.com") {
+			t.Error("HTML should contain target URL")
+		}
+		if strings.Contains(html, "<script>alert(1)</script>") {
+			t.Error("HTML should escape result content")
+		}
+	})
+}
+
+// Test default export filename generation for interactive TUI exports
+func TestDefaultExportFilename(t *testing.T) {
+	name := defaultExportFilename("https://Example.com:8443/path?x=1", "json")
+
+	if !strings.HasPrefix(name, "htping-") || !strings.Contains(name, "Example.com") {
+		t.Errorf("Unexpected sanitized host in filename: %s", name)
+	}
+
+	if !strings.HasSuffix(name, ".json") {
+		t.Errorf("Filename should keep extension: %s", name)
+	}
+
+	if fallback := defaultExportFilename("", "html"); !strings.HasPrefix(fallback, "htping-report-") {
+		t.Errorf("Empty label should fall back to 'report': %s", fallback)
 	}
 }
 

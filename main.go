@@ -414,6 +414,12 @@ func (m *PingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return PingTickMsg{}
 				})
 			}
+		case "j":
+			// Export JSON report
+			return m, m.exportReportCmd("json")
+		case "h":
+			// Export HTML report
+			return m, m.exportReportCmd("html")
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -455,32 +461,31 @@ func (m *PingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// generateReport creates and exports the comprehensive report
-func (m *PingModel) generateReport() {
-	if m.reportData == nil {
-		m.reportData = &ReportData{}
-	}
+// buildReportData assembles the comprehensive ReportData shared by the
+// TUI and simple ping modes.
+func buildReportData(targetURL string, detailedResponses []DetailedPingResponse, startTime time.Time, interval time.Duration, authConfig AuthConfig, useCache bool, count int) *ReportData {
+	reportData := &ReportData{}
 
 	// Fill in report metadata
-	m.reportData.Metadata = ReportMetadata{
+	reportData.Metadata = ReportMetadata{
 		Tool:       "htping",
 		Version:    "1.0.0",
-		Command:    fmt.Sprintf("htping %s", m.url),
-		Duration:   time.Since(m.startTime).String(),
+		Command:    fmt.Sprintf("htping %s", targetURL),
+		Duration:   time.Since(startTime).String(),
 		ReportType: "ping-report",
 	}
 
 	// Fill in target information
-	parsedURL, _ := url.Parse(m.url)
+	parsedURL, _ := url.Parse(targetURL)
 	var authInfo *AuthInfo
-	if m.authConfig.UseBasic || m.authConfig.UseCookie {
+	if authConfig.UseBasic || authConfig.UseCookie {
 		info := AuthInfo{}
-		if m.authConfig.UseBasic {
+		if authConfig.UseBasic {
 			info.Type = "basic"
-			info.Username = m.authConfig.BasicAuth.Username
-			info.HasPassword = m.authConfig.BasicAuth.Password != ""
+			info.Username = authConfig.BasicAuth.Username
+			info.HasPassword = authConfig.BasicAuth.Password != ""
 		}
-		if m.authConfig.UseCookie {
+		if authConfig.UseCookie {
 			if info.Type != "" {
 				info.Type += "+cookie"
 			} else {
@@ -491,16 +496,16 @@ func (m *PingModel) generateReport() {
 		authInfo = &info
 	}
 
-	m.reportData.Target = TargetInfo{
-		URL:            m.url,
+	reportData.Target = TargetInfo{
+		URL:            targetURL,
 		Host:           parsedURL.Host,
 		Protocol:       parsedURL.Scheme,
 		Port:           parsedURL.Port(),
 		Authentication: authInfo,
 		Options: TargetOptions{
-			Interval: m.interval.String(),
-			Count:    m.count,
-			UseCache: m.useCache,
+			Interval: interval.String(),
+			Count:    count,
+			UseCache: useCache,
 			Timeout:  "10s",
 		},
 	}
@@ -511,9 +516,9 @@ func (m *PingModel) generateReport() {
 	successCount := 0
 	cachedCount := 0
 
-	if len(m.detailedResponses) > 0 {
+	if len(detailedResponses) > 0 {
 		minDuration = time.Duration(1<<63 - 1) // Max duration
-		for _, resp := range m.detailedResponses {
+		for _, resp := range detailedResponses {
 			if resp.Error == nil {
 				successCount++
 				totalDuration += resp.Duration
@@ -535,15 +540,15 @@ func (m *PingModel) generateReport() {
 		avgDuration = totalDuration / time.Duration(successCount)
 	}
 
-	successRate := float64(successCount) / float64(len(m.detailedResponses)) * 100
+	successRate := float64(successCount) / float64(len(detailedResponses)) * 100
 
 	// Fill in ping results
-	m.reportData.PingResults = PingResults{
-		Responses: m.detailedResponses,
+	reportData.PingResults = PingResults{
+		Responses: detailedResponses,
 		Summary: PingSummary{
-			TotalPings:  len(m.detailedResponses),
+			TotalPings:  len(detailedResponses),
 			Successful:  successCount,
-			Failed:      len(m.detailedResponses) - successCount,
+			Failed:      len(detailedResponses) - successCount,
 			CachedHits:  cachedCount,
 			AvgDuration: avgDuration,
 			MinDuration: minDuration,
@@ -554,46 +559,151 @@ func (m *PingModel) generateReport() {
 
 	// Calculate overall statistics
 	totalDataTransferred := int64(0)
-	for _, resp := range m.detailedResponses {
+	for _, resp := range detailedResponses {
 		totalDataTransferred += resp.ContentSize
 	}
 
-	requestsPerSecond := float64(len(m.detailedResponses)) / time.Since(m.startTime).Seconds()
+	requestsPerSecond := float64(len(detailedResponses)) / time.Since(startTime).Seconds()
 
-	m.reportData.Statistics = Statistics{
-		TotalDuration:     time.Since(m.startTime),
-		AverageInterval:   m.interval,
+	reportData.Statistics = Statistics{
+		TotalDuration:     time.Since(startTime),
+		AverageInterval:   interval,
 		DataTransferred:   totalDataTransferred,
 		RequestsPerSecond: requestsPerSecond,
 	}
 
 	// Collect comprehensive info data
-	m.reportData.InfoData = collectAllInfoData(m.url)
+	reportData.InfoData = collectAllInfoData(targetURL)
 
-	m.reportData.Generated = time.Now()
+	reportData.Generated = time.Now()
 
-	// Set export status for TUI display
-	var exportedFiles []string
+	return reportData
+}
 
-	// Export to JSON if requested
-	if m.exportJSON != "" {
-		err := exportJSONReportTUI(m.reportData, m.exportJSON)
-		if err == nil {
-			exportedFiles = append(exportedFiles, "📊 JSON: "+m.exportJSON)
+// exportStatusLines writes reportData to the requested files and returns one
+// status line per attempted export.
+func exportStatusLines(reportData *ReportData, jsonFile, htmlFile string) []string {
+	var lines []string
+	if jsonFile != "" {
+		if err := exportJSONReportTUI(reportData, jsonFile); err != nil {
+			lines = append(lines, "❌ JSON export failed: "+err.Error())
+		} else {
+			lines = append(lines, "📊 JSON: "+jsonFile)
 		}
 	}
-
-	// Export to HTML if requested
-	if m.exportHTML != "" {
-		err := exportHTMLReportTUI(m.reportData, m.exportHTML)
-		if err == nil {
-			exportedFiles = append(exportedFiles, "📈 HTML: "+m.exportHTML)
+	if htmlFile != "" {
+		if err := exportHTMLReportTUI(reportData, htmlFile); err != nil {
+			lines = append(lines, "❌ HTML export failed: "+err.Error())
+		} else {
+			lines = append(lines, "📈 HTML: "+htmlFile)
 		}
 	}
+	return lines
+}
+
+// generateReport creates and exports the comprehensive report (TUI mode)
+func (m *PingModel) generateReport() {
+	m.reportData = buildReportData(m.url, m.detailedResponses, m.startTime, m.interval, m.authConfig, m.useCache, m.count)
 
 	// Update export status for TUI display
-	if len(exportedFiles) > 0 {
-		m.exportStatus = "✅ Reports exported:\n" + strings.Join(exportedFiles, "\n")
+	if lines := exportStatusLines(m.reportData, m.exportJSON, m.exportHTML); len(lines) > 0 {
+		m.exportStatus = strings.Join(lines, "\n")
+	}
+}
+
+// exportReportCmd returns a command that exports the collected ping results as
+// a JSON ("json") or HTML ("html") report without blocking the UI. Filenames
+// provided via --export-json/--export-html are reused; otherwise a timestamped
+// default filename is generated.
+func (m *PingModel) exportReportCmd(kind string) tea.Cmd {
+	snapshot := append([]DetailedPingResponse(nil), m.detailedResponses...)
+	file := m.exportJSON
+	if kind == "html" {
+		file = m.exportHTML
+	}
+	if file == "" {
+		file = defaultExportFilename(extractHostFromURL(m.url), kind)
+	}
+	url := m.url
+	startTime := m.startTime
+	interval := m.interval
+	authConfig := m.authConfig
+	useCache := m.useCache
+	count := m.count
+
+	return func() tea.Msg {
+		reportData := buildReportData(url, snapshot, startTime, interval, authConfig, useCache, count)
+		var status string
+		if kind == "html" {
+			status = "📈 HTML: " + file
+			if err := exportHTMLReportTUI(reportData, file); err != nil {
+				status = "❌ HTML export failed: " + err.Error()
+			}
+		} else {
+			status = "📊 JSON: " + file
+			if err := exportJSONReportTUI(reportData, file); err != nil {
+				status = "❌ JSON export failed: " + err.Error()
+			}
+		}
+		m.exportStatus = status
+		return ReportGeneratedMsg{}
+	}
+}
+
+// defaultExportFilename generates a timestamped report filename for
+// interactive TUI exports. The label is sanitized to safe filename characters.
+func defaultExportFilename(label, ext string) string {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		label = "report"
+	}
+	var safe strings.Builder
+	for _, r := range label {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.':
+			safe.WriteRune(r)
+		default:
+			safe.WriteRune('_')
+		}
+	}
+	return fmt.Sprintf("htping-%s-%s.%s", safe.String(), time.Now().Format("20060102-150405"), ext)
+}
+
+// exportResultCmd returns a command that writes the currently displayed info
+// result to a JSON ("json") or HTML ("html") file without blocking the UI.
+func (m *InfoModel) exportResultCmd(kind string) tea.Cmd {
+	url := m.url
+	infoType := m.lastAction
+	result := m.result
+	label := extractHostFromURL(url)
+	if slug := strings.ToLower(strings.ReplaceAll(infoType, " ", "-")); slug != "" {
+		if label == "" {
+			label = slug
+		} else {
+			label += "-" + slug
+		}
+	}
+	file := defaultExportFilename(label, kind)
+
+	return func() tea.Msg {
+		export := infoResultExport{
+			URL:       url,
+			InfoType:  infoType,
+			Generated: time.Now(),
+			Result:    result,
+		}
+		var err error
+		if kind == "html" {
+			err = writeInfoResultHTML(file, export)
+			m.exportStatus = "📈 HTML: " + file
+		} else {
+			err = writeInfoResultJSON(file, export)
+			m.exportStatus = "📊 JSON: " + file
+		}
+		if err != nil {
+			m.exportStatus = "❌ " + strings.ToUpper(kind) + " export failed: " + err.Error()
+		}
+		return InfoResultExportedMsg{}
 	}
 }
 
@@ -630,27 +740,17 @@ func (m *PingModel) renderContent(width, height int) string {
 		if resp.Error != nil {
 			line = errorStyle.Render(fmt.Sprintf("❌ Error: %v", resp.Error))
 		} else {
-			var statusText string
 			var style lipgloss.Style
 			switch {
 			case resp.StatusCode >= 200 && resp.StatusCode < 300:
-				statusText = "✅ OK"
 				style = successStyle
 			case resp.StatusCode >= 300 && resp.StatusCode < 400:
-				statusText = "🔄 Redirect"
 				style = warningStyle
-			case resp.StatusCode >= 400 && resp.StatusCode < 500:
-				statusText = "🚫 Client Error"
-				style = errorStyle
-			case resp.StatusCode >= 500:
-				statusText = "💥 Server Error"
-				style = errorStyle
 			default:
-				statusText = "❓ Unknown"
-				style = warningStyle
+				style = errorStyle
 			}
 			line = fmt.Sprintf("%s Status: %d, Time: %v",
-				style.Render(statusText),
+				style.Render(statusTextForCode(resp.StatusCode)),
 				resp.StatusCode,
 				resp.Duration)
 		}
@@ -706,11 +806,11 @@ func (m *PingModel) renderContent(width, height int) string {
 	// Controls help
 	var controls string
 	if m.running {
-		controls = infoStyle.Render("Press 'p' to pause, 'i' for info menu, 'w' for welcome, 'q' to quit")
+		controls = infoStyle.Render("Press 'p' to pause, 'j'/'h' to export JSON/HTML report, 'i' for info menu, 'w' for welcome, 'q' to quit")
 	} else if m.count > 0 && m.current >= m.count {
-		controls = infoStyle.Render("Press 'i' for info menu, 'w' for welcome, 'q' to quit")
+		controls = infoStyle.Render("Press 'j'/'h' to export JSON/HTML report, 'i' for info menu, 'w' for welcome, 'q' to quit")
 	} else {
-		controls = infoStyle.Render("Press 'p' to resume, 'i' for info menu, 'w' for welcome, 'q' to quit")
+		controls = infoStyle.Render("Press 'p' to resume, 'j'/'h' to export JSON/HTML report, 'i' for info menu, 'w' for welcome, 'q' to quit")
 	}
 
 	content := header + "\n\n" +
@@ -740,158 +840,116 @@ func (m *PingModel) fitToTerminal(content string, width, height int) string {
 	return responsiveBoxStyle.Render(content)
 }
 
+// statusTextForCode maps an HTTP status code to its display label.
+func statusTextForCode(code int) string {
+	switch {
+	case code >= 200 && code < 300:
+		return "✅ OK"
+	case code >= 300 && code < 400:
+		return "🔄 Redirect"
+	case code >= 400 && code < 500:
+		return "🚫 Client Error"
+	case code >= 500:
+		return "💥 Server Error"
+	default:
+		return "❓ Unknown"
+	}
+}
+
+// executeSinglePing performs one HTTP(S) ping request, handling authentication
+// and response caching. It is the shared core of both the TUI and simple modes.
+func executeSinglePing(targetURL string, client *http.Client, authConfig AuthConfig, useCache bool, index int) DetailedPingResponse {
+	start := time.Now()
+
+	authString := ""
+	if authConfig.UseBasic {
+		authString = authConfig.BasicAuth.Username + ":" + authConfig.BasicAuth.Password
+	}
+	if authConfig.UseCookie {
+		authString += ":" + authConfig.CookieAuth
+	}
+	cacheKey := generateCacheKey(targetURL, authString)
+
+	if useCache {
+		if entry, found := globalCache.Get(cacheKey); found {
+			return DetailedPingResponse{
+				PingResponse: PingResponse{
+					StatusCode: entry.StatusCode,
+					Duration:   time.Since(start),
+					Timestamp:  time.Now(),
+				},
+				Index:       index,
+				FromCache:   true,
+				Headers:     entry.Headers,
+				ContentType: entry.Headers.Get("Content-Type"),
+				ContentSize: int64(len(entry.Body)),
+			}
+		}
+	}
+
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		return DetailedPingResponse{
+			PingResponse: PingResponse{
+				Error:     err,
+				Duration:  time.Since(start),
+				Timestamp: time.Now(),
+			},
+			Index: index,
+		}
+	}
+
+	configureRequest(req, authConfig)
+
+	resp, err := client.Do(req)
+	duration := time.Since(start)
+	if err != nil {
+		return DetailedPingResponse{
+			PingResponse: PingResponse{
+				Error:     err,
+				Duration:  duration,
+				Timestamp: time.Now(),
+			},
+			Index: index,
+		}
+	}
+
+	headers := resp.Header
+
+	body, _ := io.ReadAll(resp.Body)
+	if err := resp.Body.Close(); err != nil {
+		fmt.Printf("Error closing response body: %v\n", err)
+	}
+
+	if useCache {
+		globalCache.Set(cacheKey, &CacheEntry{
+			Response:   resp,
+			Body:       body,
+			Timestamp:  time.Now(),
+			StatusCode: resp.StatusCode,
+			Headers:    headers,
+		})
+	}
+
+	return DetailedPingResponse{
+		PingResponse: PingResponse{
+			StatusCode: resp.StatusCode,
+			Duration:   duration,
+			Timestamp:  time.Now(),
+		},
+		Index:       index,
+		Headers:     headers,
+		ContentType: headers.Get("Content-Type"),
+		ContentSize: int64(len(body)),
+	}
+}
+
 func (m *PingModel) performPing() tea.Cmd {
 	return func() tea.Msg {
-		start := time.Now()
-
-		// Generate cache key
-		authString := ""
-		if m.authConfig.UseBasic {
-			authString = m.authConfig.BasicAuth.Username + ":" + m.authConfig.BasicAuth.Password
-		}
-		if m.authConfig.UseCookie {
-			authString += ":" + m.authConfig.CookieAuth
-		}
-		cacheKey := generateCacheKey(m.url, authString)
-
-		var fromCache bool
-		var body []byte
-		var headers http.Header
-		var contentType string
-		var contentSize int64
-
-		// Check cache first if enabled
-		if m.useCache {
-			if entry, found := globalCache.Get(cacheKey); found {
-				duration := time.Since(start)
-				fromCache = true
-				headers = entry.Headers
-				body = entry.Body
-				contentSize = int64(len(body))
-				if ct := headers.Get("Content-Type"); ct != "" {
-					contentType = ct
-				}
-
-				// Create detailed response for reporting
-				detailedResp := DetailedPingResponse{
-					PingResponse: PingResponse{
-						StatusCode: entry.StatusCode,
-						Duration:   duration,
-						Timestamp:  time.Now(),
-					},
-					Index:       m.current + 1,
-					FromCache:   fromCache,
-					Headers:     headers,
-					ContentType: contentType,
-					ContentSize: contentSize,
-				}
-
-				return PingResultMsg{
-					Response: PingResponse{
-						StatusCode: entry.StatusCode,
-						Duration:   duration,
-						Timestamp:  time.Now(),
-					},
-					DetailedResponse: &detailedResp,
-				}
-			}
-		}
-
-		// Create request with authentication
-		req, err := http.NewRequest("GET", m.url, nil)
-		if err != nil {
-			detailedResp := DetailedPingResponse{
-				PingResponse: PingResponse{
-					Error:     err,
-					Duration:  time.Since(start),
-					Timestamp: time.Now(),
-				},
-				Index:     m.current + 1,
-				FromCache: false,
-			}
-
-			return PingResultMsg{
-				Response: PingResponse{
-					Error:     err,
-					Duration:  time.Since(start),
-					Timestamp: time.Now(),
-				},
-				DetailedResponse: &detailedResp,
-			}
-		}
-
-		// Configure authentication
-		configureRequest(req, m.authConfig)
-
-		// Perform request
-		resp, err := m.client.Do(req)
-		duration := time.Since(start)
-
-		if err != nil {
-			detailedResp := DetailedPingResponse{
-				PingResponse: PingResponse{
-					Error:     err,
-					Duration:  duration,
-					Timestamp: time.Now(),
-				},
-				Index:     m.current + 1,
-				FromCache: false,
-			}
-
-			return PingResultMsg{
-				Response: PingResponse{
-					Error:     err,
-					Duration:  duration,
-					Timestamp: time.Now(),
-				},
-				DetailedResponse: &detailedResp,
-			}
-		}
-
-		statusCode := resp.StatusCode
-		headers = resp.Header
-		contentType = headers.Get("Content-Type")
-
-		// Read body for caching and size calculation
-		body, _ = io.ReadAll(resp.Body)
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
-		}
-		contentSize = int64(len(body))
-
-		// Cache the response if caching is enabled
-		if m.useCache {
-			entry := &CacheEntry{
-				Response:   resp,
-				Body:       body,
-				Timestamp:  time.Now(),
-				StatusCode: statusCode,
-				Headers:    headers,
-			}
-			globalCache.Set(cacheKey, entry)
-		}
-
-		// Create detailed response for reporting
-		detailedResp := DetailedPingResponse{
-			PingResponse: PingResponse{
-				StatusCode: statusCode,
-				Duration:   duration,
-				Timestamp:  time.Now(),
-			},
-			Index:       m.current + 1,
-			FromCache:   fromCache,
-			Headers:     headers,
-			ContentType: contentType,
-			ContentSize: contentSize,
-		}
-
+		resp := executeSinglePing(m.url, m.client, m.authConfig, m.useCache, m.current+1)
 		return PingResultMsg{
-			Response: PingResponse{
-				StatusCode: statusCode,
-				Duration:   duration,
-				Timestamp:  time.Now(),
-			},
-			DetailedResponse: &detailedResp,
+			Response:         resp.PingResponse,
+			DetailedResponse: &resp,
 		}
 	}
 }
@@ -1038,155 +1096,158 @@ func collectAllInfoData(targetURL string) InfoData {
 	return infoData
 }
 
-// exportJSONReport exports the report data as JSON
-func exportJSONReport(reportData *ReportData, filename string) error {
+// reportTemplateFuncs provides the template helpers shared by all HTML exporters.
+var reportTemplateFuncs = template.FuncMap{
+	"formatDuration": func(d time.Duration) string {
+		if d == 0 {
+			return "0s"
+		}
+		return d.String()
+	},
+	"formatBytes": func(b int64) string {
+		if b == 0 {
+			return "0 B"
+		}
+		const unit = 1024
+		if b < unit {
+			return fmt.Sprintf("%d B", b)
+		}
+		div, exp := int64(unit), 0
+		for n := b / unit; n >= unit; n /= unit {
+			div *= unit
+			exp++
+		}
+		return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+	},
+	"statusText": statusTextForCode,
+	"formatTime": func(t time.Time) string {
+		return t.Format("2006-01-02 15:04:05")
+	},
+}
+
+// writeJSONReport writes the report data as JSON without printing anything.
+func writeJSONReport(reportData *ReportData, filename string) error {
 	data, err := json.MarshalIndent(reportData, "", "  ")
 	if err != nil {
-		fmt.Printf("Error marshaling JSON report: %v\n", err)
 		return err
 	}
+	return os.WriteFile(filename, data, 0644)
+}
 
-	err = os.WriteFile(filename, data, 0644)
-	if err != nil {
-		fmt.Printf("Error writing JSON report: %v\n", err)
+// exportJSONReport exports the report data as JSON, printing a status message.
+func exportJSONReport(reportData *ReportData, filename string) error {
+	if err := writeJSONReport(reportData, filename); err != nil {
+		fmt.Printf("Error exporting JSON report: %v\n", err)
 		return err
 	}
-
 	fmt.Printf("📊 JSON report exported to: %s\n", filename)
 	return nil
 }
 
-// exportHTMLReport exports the report data as HTML
-func exportHTMLReport(reportData *ReportData, filename string) error {
-	tmpl, err := template.New("report").Funcs(template.FuncMap{
-		"formatDuration": func(d time.Duration) string {
-			if d == 0 {
-				return "0s"
-			}
-			return d.String()
-		},
-		"formatBytes": func(b int64) string {
-			if b == 0 {
-				return "0 B"
-			}
-			const unit = 1024
-			if b < unit {
-				return fmt.Sprintf("%d B", b)
-			}
-			div, exp := int64(unit), 0
-			for n := b / unit; n >= unit; n /= unit {
-				div *= unit
-				exp++
-			}
-			return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
-		},
-		"statusText": func(code int) string {
-			switch {
-			case code >= 200 && code < 300:
-				return "✅ OK"
-			case code >= 300 && code < 400:
-				return "🔄 Redirect"
-			case code >= 400 && code < 500:
-				return "🚫 Client Error"
-			case code >= 500:
-				return "💥 Server Error"
-			default:
-				return "❓ Unknown"
-			}
-		},
-		"formatTime": func(t time.Time) string {
-			return t.Format("2006-01-02 15:04:05")
-		},
-	}).Parse(htmlReportTemplate)
+// writeHTMLReport renders and writes the HTML report without printing anything.
+func writeHTMLReport(reportData *ReportData, filename string) error {
+	tmpl, err := template.New("report").Funcs(reportTemplateFuncs).Parse(htmlReportTemplate)
 	if err != nil {
-		fmt.Printf("Error parsing HTML template: %v\n", err)
 		return err
 	}
 
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, reportData)
-	if err != nil {
-		fmt.Printf("Error executing HTML template: %v\n", err)
+	if err := tmpl.Execute(&buf, reportData); err != nil {
 		return err
 	}
+	return os.WriteFile(filename, buf.Bytes(), 0644)
+}
 
-	err = os.WriteFile(filename, buf.Bytes(), 0644)
-	if err != nil {
-		fmt.Printf("Error writing HTML report: %v\n", err)
+// exportHTMLReport exports the report data as HTML, printing a status message.
+func exportHTMLReport(reportData *ReportData, filename string) error {
+	if err := writeHTMLReport(reportData, filename); err != nil {
+		fmt.Printf("Error exporting HTML report: %v\n", err)
 		return err
 	}
-
 	fmt.Printf("📈 HTML report exported to: %s\n", filename)
 	return nil
 }
 
-// exportJSONReportTUI exports the report data as JSON (TUI-compatible version)
+// exportJSONReportTUI is the silent variant of exportJSONReport used by the TUI.
 func exportJSONReportTUI(reportData *ReportData, filename string) error {
-	data, err := json.MarshalIndent(reportData, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(filename, data, 0644)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return writeJSONReport(reportData, filename)
 }
 
-// exportHTMLReportTUI exports the report data as HTML (TUI-compatible version)
+// exportHTMLReportTUI is the silent variant of exportHTMLReport used by the TUI.
 func exportHTMLReportTUI(reportData *ReportData, filename string) error {
-	tmpl, err := template.New("report").Funcs(template.FuncMap{
-		"formatDuration": func(d time.Duration) string {
-			if d == 0 {
-				return "0s"
-			}
-			return d.String()
-		},
-		"formatSize": func(b int64) string {
-			const unit = 1024
-			if b < unit {
-				return fmt.Sprintf("%d B", b)
-			}
-			div, exp := int64(unit), 0
-			for n := b / unit; n >= unit; n /= unit {
-				div *= unit
-				exp++
-			}
-			return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
-		},
-		"statusText": func(code int) string {
-			switch {
-			case code >= 200 && code < 300:
-				return "✅ OK"
-			case code >= 300 && code < 400:
-				return "🔄 Redirect"
-			case code >= 400 && code < 500:
-				return "🚫 Client Error"
-			case code >= 500:
-				return "💥 Server Error"
-			default:
-				return "❓ Unknown"
-			}
-		},
-	}).Parse(htmlReportTemplate)
+	return writeHTMLReport(reportData, filename)
+}
+
+// InfoResultExportedMsg signals that an info result export finished.
+type InfoResultExportedMsg struct{}
+
+// infoResultExport is the on-disk representation of an exported info result view.
+type infoResultExport struct {
+	URL       string    `json:"url"`
+	InfoType  string    `json:"info_type"`
+	Generated time.Time `json:"generated"`
+	Result    string    `json:"result"`
+}
+
+// writeInfoResultJSON writes an info result view as a standalone JSON document.
+func writeInfoResultJSON(filename string, export infoResultExport) error {
+	data, err := json.MarshalIndent(export, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, data, 0644)
+}
+
+// infoResultHTMLTemplate contains the HTML template for exported info results.
+const infoResultHTMLTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>htping {{.InfoType}} - {{.URL}}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 2rem auto;
+            max-width: 900px;
+            padding: 0 1rem;
+            background: #0d1117;
+            color: #c9d1d9;
+        }
+        h1 { color: #58a6ff; margin-bottom: 0.25rem; }
+        .target { color: #8b949e; margin-top: 0; }
+        pre {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 1rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        footer { margin-top: 2rem; font-size: 0.85rem; color: #8b949e; }
+    </style>
+</head>
+<body>
+    <h1>🔍 {{.InfoType}}</h1>
+    <p class="target">Target: <strong>{{.URL}}</strong></p>
+    <pre>{{.Result}}</pre>
+    <footer>Generated by htping on {{.Generated.Format "2006-01-02 15:04:05"}}</footer>
+</body>
+</html>
+`
+
+// writeInfoResultHTML writes an info result view as a standalone HTML document.
+func writeInfoResultHTML(filename string, export infoResultExport) error {
+	tmpl, err := template.New("infoResult").Parse(infoResultHTMLTemplate)
 	if err != nil {
 		return err
 	}
 
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, reportData)
-	if err != nil {
+	if err := tmpl.Execute(&buf, export); err != nil {
 		return err
 	}
-
-	err = os.WriteFile(filename, buf.Bytes(), 0644)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return os.WriteFile(filename, buf.Bytes(), 0644)
 }
 
 // htmlReportTemplate contains the HTML template for reports
@@ -1366,7 +1427,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
         </div>
     </div>
 
-    {{if .InfoData.DNS.Nameservers}}
+    {{if and .InfoData.DNS .InfoData.DNS.Nameservers}}
     <div class="card">
         <h2>🌐 DNS Information</h2>
         <div class="stat-item">
@@ -1380,7 +1441,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
     </div>
     {{end}}
 
-    {{if .InfoData.IP.Addresses}}
+    {{if and .InfoData.IP .InfoData.IP.Addresses}}
     <div class="card">
         <h2>📍 IP Information</h2>
         <div class="stat-item">
@@ -1395,7 +1456,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
 
     </div>
 
-    {{if .InfoData.Certificate.Subject}}
+    {{if and .InfoData.Certificate .InfoData.Certificate.Subject}}
     <div class="container">
     <div class="card">
         <h2>🔒 Certificate Information</h2>
@@ -1418,7 +1479,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
         </div>
     </div>
 
-    {{if .InfoData.Geolocation.Country}}
+    {{if and .InfoData.Geolocation .InfoData.Geolocation.Country}}
     <div class="card">
         <h2>🌍 Geolocation</h2>
         <div style="font-size: 0.9em;">
@@ -1502,7 +1563,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
     </div>
     {{end}}
 
-    {{if .InfoData.WHOIS.Domain}}
+    {{if and .InfoData.WHOIS .InfoData.WHOIS.Domain}}
     <div class="card full-width">
         <h2>📜 WHOIS Information</h2>
         <p><strong>Domain:</strong> {{.InfoData.WHOIS.Domain}}</p>
@@ -1573,7 +1634,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
                 <span>Cache Enabled:</span>
                 <span>{{if .Target.Options.UseCache}}✅ Yes{{else}}❌ No{{end}}</span>
             </div>
-            {{if .Target.Authentication.Type}}
+            {{if and .Target.Authentication .Target.Authentication.Type}}
             <div class="meta-item">
                 <span>Authentication:</span>
                 <span>🔐 {{.Target.Authentication.Type}}</span>
@@ -1833,37 +1894,27 @@ func main() {
 		Run:   pingFunc,
 	}
 
-	// Initialize flags for both root and ping commands
-	pingCmd.Flags().IntVarP(&pingCount, "count", "c", 0, "Number of pings to perform (0 for continuous)")
-	pingCmd.Flags().BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
-	pingCmd.Flags().BoolVar(&showHTMLFlag, "html", false, "Show HTML content after pings")
-	pingCmd.Flags().StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html")
-	pingCmd.Flags().BoolVar(&showResourceStats, "resourcestats", false, "Show page resource statistics after pings")
-	pingCmd.Flags().BoolVar(&showPerformanceMetrics, "performance", false, "Show performance metrics after pings")
-	pingCmd.Flags().BoolVar(&showGeolocation, "geolocation", false, "Show geolocation information after pings")
-	pingCmd.Flags().StringVarP(&basicUsername, "username", "u", "", "Basic authentication username")
-	pingCmd.Flags().StringVarP(&basicPassword, "password", "p", "", "Basic authentication password")
-	pingCmd.Flags().StringVar(&cookieAuth, "cookie", "", "Cookie authentication string (e.g., 'session=abc123')")
-	pingCmd.Flags().BoolVar(&useCache, "cache", false, "Enable response caching (5 minute TTL)")
-	pingCmd.Flags().IntVarP(&pingInterval, "interval", "i", int(defaultPingInterval/time.Second), "Ping interval in seconds")
-	pingCmd.Flags().StringVar(&exportJSON, "export-json", "", "Export results to JSON file")
-	pingCmd.Flags().StringVar(&exportHTML, "export-html", "", "Export results to HTML report")
-
-	// Add the same flags to root command for default ping behavior
-	rootCmd.Flags().IntVarP(&pingCount, "count", "c", 0, "Number of pings to perform (0 for continuous)")
-	rootCmd.Flags().BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
-	rootCmd.Flags().BoolVar(&showHTMLFlag, "html", false, "Show HTML content after pings")
-	rootCmd.Flags().StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html")
-	rootCmd.Flags().BoolVar(&showResourceStats, "resourcestats", false, "Show page resource statistics after pings")
-	rootCmd.Flags().BoolVar(&showPerformanceMetrics, "performance", false, "Show performance metrics after pings")
-	rootCmd.Flags().BoolVar(&showGeolocation, "geolocation", false, "Show geolocation information after pings")
-	rootCmd.Flags().StringVarP(&basicUsername, "username", "u", "", "Basic authentication username")
-	rootCmd.Flags().StringVarP(&basicPassword, "password", "p", "", "Basic authentication password")
-	rootCmd.Flags().StringVar(&cookieAuth, "cookie", "", "Cookie authentication string (e.g., 'session=abc123')")
-	rootCmd.Flags().BoolVar(&useCache, "cache", false, "Enable response caching (5 minute TTL)")
-	rootCmd.Flags().IntVarP(&pingInterval, "interval", "i", int(defaultPingInterval/time.Second), "Ping interval in seconds")
-	rootCmd.Flags().StringVar(&exportJSON, "export-json", "", "Export results to JSON file")
-	rootCmd.Flags().StringVar(&exportHTML, "export-html", "", "Export results to HTML report")
+	// Register ping flags on both commands; they bind shared package vars,
+	// so each flag is defined exactly once here.
+	registerPingFlags := func(cmd *cobra.Command) {
+		flags := cmd.Flags()
+		flags.IntVarP(&pingCount, "count", "c", 0, "Number of pings to perform (0 for continuous)")
+		flags.BoolVar(&useHTTP, "http", false, "Use HTTP instead of HTTPS")
+		flags.BoolVar(&showHTMLFlag, "html", false, "Show HTML content after pings")
+		flags.StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html")
+		flags.BoolVar(&showResourceStats, "resourcestats", false, "Show page resource statistics after pings")
+		flags.BoolVar(&showPerformanceMetrics, "performance", false, "Show performance metrics after pings")
+		flags.BoolVar(&showGeolocation, "geolocation", false, "Show geolocation information after pings")
+		flags.StringVarP(&basicUsername, "username", "u", "", "Basic authentication username")
+		flags.StringVarP(&basicPassword, "password", "p", "", "Basic authentication password")
+		flags.StringVar(&cookieAuth, "cookie", "", "Cookie authentication string (e.g., 'session=abc123')")
+		flags.BoolVar(&useCache, "cache", false, "Enable response caching (5 minute TTL)")
+		flags.IntVarP(&pingInterval, "interval", "i", int(defaultPingInterval/time.Second), "Ping interval in seconds")
+		flags.StringVar(&exportJSON, "export-json", "", "Export results to JSON file")
+		flags.StringVar(&exportHTML, "export-html", "", "Export results to HTML report")
+	}
+	registerPingFlags(pingCmd)
+	registerPingFlags(rootCmd)
 
 	// Add the output flag to showHTMLCmd as well
 	showHTMLCmd.Flags().StringVarP(&outputFilename, "output", "o", "", "Output filename for HTML content - use with --html or htping html <url>")
@@ -2191,6 +2242,10 @@ func fetchGeoLocation(ipAddress string) (*GeoLocation, error) {
 	return fetchFromIPAPI(ipAddress)
 }
 
+// errRateLimited is returned when ipapi.co throttles us (HTTP 429). The free
+// tier publishes no reset window, so callers should back off or skip.
+var errRateLimited = fmt.Errorf("ipapi.co rate limited")
+
 // fetchFromIPAPI fetches from ipapi.co
 func fetchFromIPAPI(ipAddress string) (*GeoLocation, error) {
 	// Using ipapi.co free service (more accurate than ip-api.com)
@@ -2211,9 +2266,12 @@ func fetchFromIPAPI(ipAddress string) (*GeoLocation, error) {
 		}
 	}()
 
-	// If rate limited, return helpful error message
+	// If rate limited, surface Retry-After when the server provides one
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("rate limited - please wait a moment and try again")
+		if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+			return nil, fmt.Errorf("%w (server says Retry-After: %s)", errRateLimited, retryAfter)
+		}
+		return nil, errRateLimited
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -2323,6 +2381,7 @@ type InfoModel struct {
 	lastAction     string // Track what info was last requested
 	showPingOption bool   // Show option to go to ping
 	fromWelcome    bool   // Track if we came from welcome screen
+	exportStatus   string // Status message after exporting a report
 }
 
 // NewInfoModel creates a new info model
@@ -2363,22 +2422,35 @@ func (m *InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showResult = false
 				m.result = ""
 				m.loading = false
+				m.exportStatus = ""
 			}
 		case "w":
-			// Go back to welcome menu if not showing result
-			if !m.showResult && m.fromWelcome {
-				welcomeModel := NewWelcomeModelWithSize(m.width, m.height)
-				return welcomeModel, nil
-			}
+			// Return to welcome menu from any page
+			welcomeModel := NewWelcomeModelWithSize(m.width, m.height)
+			return welcomeModel, nil
 		case "up", "k":
 			// Only allow navigation in menu mode
 			if !m.showResult && m.selected > 0 {
 				m.selected--
 			}
-		case "down", "j":
+		case "down":
 			// Only allow navigation in menu mode
 			if !m.showResult && m.selected < len(m.options)-1 {
 				m.selected++
+			}
+		case "j":
+			// Navigate in menu mode; export JSON report in result view
+			if !m.showResult {
+				if m.selected < len(m.options)-1 {
+					m.selected++
+				}
+			} else if !m.loading && m.result != "" {
+				return m, m.exportResultCmd("json")
+			}
+		case "h":
+			// Export HTML report in result view
+			if m.showResult && !m.loading && m.result != "" {
+				return m, m.exportResultCmd("html")
 			}
 		case "enter", " ":
 			// Only allow selection in menu mode and when not loading
@@ -2416,6 +2488,7 @@ func (m *InfoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Regular info option
 					m.loading = true
 					m.lastAction = m.options[m.selected]
+					m.exportStatus = ""
 					return m, m.fetchInfo()
 				}
 			}
@@ -2466,19 +2539,18 @@ func (m *InfoModel) View() string {
 		// Add breadcrumb
 		breadcrumb := infoStyle.Render(fmt.Sprintf("🏠 Info Menu > %s", m.lastAction))
 
-		var backInstructions string
-		if m.fromWelcome {
-			backInstructions = warningStyle.Render("← Press 'b'/'esc' to go back, 'w' for welcome") + "\n" +
-				infoStyle.Render("Press 'q' to quit")
-		} else {
-			backInstructions = warningStyle.Render("← Press 'b', 'esc', or 'backspace' to go back") + "\n" +
-				infoStyle.Render("Press 'q' to quit")
-		}
+		backInstructions := warningStyle.Render("← Press 'b'/'esc' to go back, 'w' for welcome") + "\n" +
+			infoStyle.Render("Press 'j' for JSON report, 'h' for HTML report, 'q' to quit")
 
 		content := header + "\n\n" +
 			breadcrumb + "\n\n" +
 			result + "\n\n" +
 			backInstructions
+
+		if m.exportStatus != "" {
+			content += "\n\n" + successStyle.Render(m.exportStatus)
+		}
+
 		return m.fitInfoToTerminal(content, width, height)
 	}
 
@@ -2506,12 +2578,7 @@ func (m *InfoModel) View() string {
 		menu.WriteString("\n")
 	}
 
-	var backOption string
-	if m.fromWelcome {
-		backOption = infoStyle.Render("Press 'w' for welcome menu, 'q' to quit")
-	} else {
-		backOption = infoStyle.Render("Press 'q' to quit")
-	}
+	backOption := infoStyle.Render("Press 'w' for welcome menu, 'q' to quit")
 
 	content := header + "\n\n" +
 		"Use ↑↓ or j/k to navigate, Enter to select:\n\n" +
@@ -2708,146 +2775,24 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 	startTime := time.Now()
 
 	for i := 0; i < count || count <= 0; i++ {
-		start := time.Now()
+		detailedResp := executeSinglePing(url, client, authConfig, useCache, i+1)
 
-		// Generate cache key
-		authString := ""
-		if authConfig.UseBasic {
-			authString = authConfig.BasicAuth.Username + ":" + authConfig.BasicAuth.Password
-		}
-		if authConfig.UseCookie {
-			authString += ":" + authConfig.CookieAuth
-		}
-		cacheKey := generateCacheKey(url, authString)
-
-		var resp *http.Response
-		var fromCache bool
-
-		// Check cache first if enabled
-		if useCache {
-			if entry, found := globalCache.Get(cacheKey); found {
-				duration := time.Since(start)
-				fmt.Printf("Status: %d (cached), Time: %v\n", entry.StatusCode, duration)
-				fromCache = true
-				totalDuration += duration
-				successfulPings++
-
-				// Add detailed response for reporting
-				detailedResp := DetailedPingResponse{
-					PingResponse: PingResponse{
-						StatusCode: entry.StatusCode,
-						Duration:   duration,
-						Timestamp:  time.Now(),
-					},
-					Index:       i + 1,
-					FromCache:   true,
-					Headers:     entry.Headers,
-					ContentType: entry.Headers.Get("Content-Type"),
-					ContentSize: int64(len(entry.Body)),
-				}
-				detailedResponses = append(detailedResponses, detailedResp)
-			}
+		if detailedResp.FromCache {
+			fmt.Printf("Status: %d (cached), Time: %v\n", detailedResp.StatusCode, detailedResp.Duration)
+		} else if detailedResp.Error != nil {
+			fmt.Printf("Error: %v\n", detailedResp.Error)
+		} else {
+			fmt.Printf("Status: %d %s, Time: %v\n",
+				detailedResp.StatusCode,
+				statusTextForCode(detailedResp.StatusCode),
+				detailedResp.Duration)
 		}
 
-		if !fromCache {
-			// Create request with authentication
-			req, err := http.NewRequest("GET", url, nil)
-			if err != nil {
-				fmt.Printf("Error creating request: %v\n", err)
-				// Add error response for reporting
-				detailedResp := DetailedPingResponse{
-					PingResponse: PingResponse{
-						Error:     err,
-						Duration:  time.Since(start),
-						Timestamp: time.Now(),
-					},
-					Index:     i + 1,
-					FromCache: false,
-				}
-				detailedResponses = append(detailedResponses, detailedResp)
-				continue
-			}
-
-			// Configure authentication
-			configureRequest(req, authConfig)
-
-			// Perform request
-			resp, err = client.Do(req)
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-				// Add error response for reporting
-				duration := time.Since(start)
-				detailedResp := DetailedPingResponse{
-					PingResponse: PingResponse{
-						Error:     err,
-						Duration:  duration,
-						Timestamp: time.Now(),
-					},
-					Index:     i + 1,
-					FromCache: false,
-				}
-				detailedResponses = append(detailedResponses, detailedResp)
-				if count > 0 && i >= count-1 {
-					break
-				}
-				time.Sleep(interval)
-				continue
-			}
-
-			duration := time.Since(start)
-			totalDuration += duration
+		if detailedResp.Error == nil {
+			totalDuration += detailedResp.Duration
 			successfulPings++
-
-			statusCode := resp.StatusCode
-			var statusText string
-			switch {
-			case statusCode >= 200 && statusCode < 300:
-				statusText = "✅ OK"
-			case statusCode >= 300 && statusCode < 400:
-				statusText = "🔄 Redirect"
-			case statusCode >= 400 && statusCode < 500:
-				statusText = "🚫 Client Error"
-			case statusCode >= 500:
-				statusText = "💥 Server Error"
-			default:
-				statusText = "❓ Unknown"
-			}
-
-			fmt.Printf("Status: %d %s, Time: %v\n", statusCode, statusText, duration)
-
-			// Read body for caching and size calculation
-			body, _ := io.ReadAll(resp.Body)
-			if err := resp.Body.Close(); err != nil {
-				fmt.Printf("Error closing response body: %v\n", err)
-			}
-
-			// Cache the response if caching is enabled
-			if useCache {
-				entry := &CacheEntry{
-					Response:   resp,
-					Body:       body,
-					Timestamp:  time.Now(),
-					StatusCode: statusCode,
-					Headers:    resp.Header,
-				}
-				globalCache.Set(cacheKey, entry)
-			}
-
-			// Add detailed response for reporting
-			detailedResp := DetailedPingResponse{
-				PingResponse: PingResponse{
-					StatusCode: statusCode,
-					Duration:   duration,
-					Timestamp:  time.Now(),
-				},
-				Index:       i + 1,
-				FromCache:   false,
-				Headers:     resp.Header,
-				ContentType: resp.Header.Get("Content-Type"),
-				ContentSize: int64(len(body)),
-			}
-			detailedResponses = append(detailedResponses, detailedResp)
 		}
+		detailedResponses = append(detailedResponses, detailedResp)
 
 		if count > 0 && i >= count-1 {
 			break
@@ -2871,118 +2816,7 @@ func runSimplePing(url, ip string, client *http.Client, count int, interval time
 
 // generateSimpleReport generates a report for simple ping mode
 func generateSimpleReport(targetURL string, detailedResponses []DetailedPingResponse, startTime time.Time, interval time.Duration, authConfig AuthConfig, useCache bool, count int, exportJSON, exportHTML string) {
-	reportData := &ReportData{}
-
-	// Fill in report metadata
-	reportData.Metadata = ReportMetadata{
-		Tool:       "htping",
-		Version:    "1.0.0",
-		Command:    fmt.Sprintf("htping %s", targetURL),
-		Duration:   time.Since(startTime).String(),
-		ReportType: "ping-report",
-	}
-
-	// Fill in target information
-	parsedURL, _ := url.Parse(targetURL)
-	var authInfo *AuthInfo
-	if authConfig.UseBasic || authConfig.UseCookie {
-		info := AuthInfo{}
-		if authConfig.UseBasic {
-			info.Type = "basic"
-			info.Username = authConfig.BasicAuth.Username
-			info.HasPassword = authConfig.BasicAuth.Password != ""
-		}
-		if authConfig.UseCookie {
-			if info.Type != "" {
-				info.Type += "+cookie"
-			} else {
-				info.Type = "cookie"
-			}
-			info.HasCookie = true
-		}
-		authInfo = &info
-	}
-
-	reportData.Target = TargetInfo{
-		URL:            targetURL,
-		Host:           parsedURL.Host,
-		Protocol:       parsedURL.Scheme,
-		Port:           parsedURL.Port(),
-		Authentication: authInfo,
-		Options: TargetOptions{
-			Interval: interval.String(),
-			Count:    count,
-			UseCache: useCache,
-			Timeout:  "10s",
-		},
-	}
-
-	// Calculate ping statistics
-	var minDuration, maxDuration time.Duration
-	var totalDuration time.Duration
-	successCount := 0
-	cachedCount := 0
-
-	if len(detailedResponses) > 0 {
-		minDuration = time.Duration(1<<63 - 1) // Max duration
-		for _, resp := range detailedResponses {
-			if resp.Error == nil {
-				successCount++
-				totalDuration += resp.Duration
-				if resp.Duration < minDuration {
-					minDuration = resp.Duration
-				}
-				if resp.Duration > maxDuration {
-					maxDuration = resp.Duration
-				}
-				if resp.FromCache {
-					cachedCount++
-				}
-			}
-		}
-	}
-
-	avgDuration := time.Duration(0)
-	if successCount > 0 {
-		avgDuration = totalDuration / time.Duration(successCount)
-	}
-
-	successRate := float64(successCount) / float64(len(detailedResponses)) * 100
-
-	// Fill in ping results
-	reportData.PingResults = PingResults{
-		Responses: detailedResponses,
-		Summary: PingSummary{
-			TotalPings:  len(detailedResponses),
-			Successful:  successCount,
-			Failed:      len(detailedResponses) - successCount,
-			CachedHits:  cachedCount,
-			AvgDuration: avgDuration,
-			MinDuration: minDuration,
-			MaxDuration: maxDuration,
-			SuccessRate: successRate,
-		},
-	}
-
-	// Calculate overall statistics
-	totalDataTransferred := int64(0)
-	for _, resp := range detailedResponses {
-		totalDataTransferred += resp.ContentSize
-	}
-
-	requestsPerSecond := float64(len(detailedResponses)) / time.Since(startTime).Seconds()
-
-	reportData.Statistics = Statistics{
-		TotalDuration:     time.Since(startTime),
-		AverageInterval:   interval,
-		DataTransferred:   totalDataTransferred,
-		RequestsPerSecond: requestsPerSecond,
-	}
-
-	// Collect comprehensive info data
-	reportData.InfoData = collectAllInfoData(targetURL)
-
-	reportData.Generated = time.Now()
+	reportData := buildReportData(targetURL, detailedResponses, startTime, interval, authConfig, useCache, count)
 
 	// Show generating reports message
 	if exportJSON != "" || exportHTML != "" {
@@ -3394,6 +3228,7 @@ func showWelcomeText() {
 	fmt.Println("  htping info resources google.com")
 	fmt.Println("  htping info perf github.com")
 	fmt.Println("  htping info geo example.com")
+	fmt.Println("  htping google.com -c 5 --export-html report.html # Generate HTML report")
 	fmt.Println()
 	fmt.Println("Options:")
 	fmt.Println("  -c, --count int       Number of pings (0 for continuous)")
@@ -3409,8 +3244,11 @@ func showWelcomeText() {
 	fmt.Println("      --export-html string Export results to HTML report")
 	fmt.Println()
 	fmt.Println("TUI Controls:")
-	fmt.Println("  Ping mode: 'p' = pause/resume, 'i' = info menu, 'q' = quit")
-	fmt.Println("  Info mode: ↑↓/j/k = navigate, Enter = select, Esc/b = back, 'q' = quit")
+	fmt.Println("  Ping mode: 'p' = pause/resume, 'j' = JSON report, 'h' = HTML report")
+	fmt.Println("             'i' = info menu, 'w' = welcome menu, 'q' = quit")
+	fmt.Println("  Info mode: ↑↓/j/k = navigate, Enter = select, Esc/b = back")
+	fmt.Println("             In results: 'j' = JSON report, 'h' = HTML report")
+	fmt.Println("             'w' = welcome menu, 'q' = quit")
 	fmt.Println()
 	fmt.Println("For more help: htping --help")
 }
@@ -3492,6 +3330,8 @@ func NewHelpModel() *HelpModel {
 		"",
 		"Ping Mode:",
 		"  p or Space          Pause/resume pinging",
+		"  j                   Export results as JSON report",
+		"  h                   Export results as HTML report",
 		"  i                   Switch to info menu",
 		"  w                   Return to welcome menu",
 		"  q or Ctrl+C         Quit application",
@@ -3504,6 +3344,8 @@ func NewHelpModel() *HelpModel {
 		"  q                   Quit application",
 		"",
 		"Info Results:",
+		"  j                   Export result as JSON report",
+		"  h                   Export result as HTML report",
 		"  b, Esc, Backspace   Back to info menu",
 		"  w                   Return to welcome menu",
 		"  q                   Quit application",
